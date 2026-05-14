@@ -1,0 +1,12 @@
+[Unit]
+Description=Minecraft World Backup
+After=minecraft.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/minecraft-infra
+EnvironmentFile=/opt/minecraft-infra/.env
+ExecStart=/opt/minecraft-infra/scripts/backup.sh
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=minecraft-backup

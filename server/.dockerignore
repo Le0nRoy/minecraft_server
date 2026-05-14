@@ -1,0 +1,5 @@
+# Ignore local data volumes from Docker context
+minecraft_data/
+data/
+*.log
+*.log.*

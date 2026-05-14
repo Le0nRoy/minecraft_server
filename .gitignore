@@ -1,0 +1,33 @@
+# Backup storage
+backups/
+*.zst
+*.gz
+
+# Environment secrets (keep .env.example)
+.env
+
+# Minecraft world and logs
+server/world/
+server/logs/
+server/crash-reports/
+
+# Java artifacts (exclude packwiz directory)
+*.jar
+!packwiz/**/*.jar
+
+# Python
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+
+# macOS
+.DS_Store
+
+# Log files
+*.log
+
+# Generated output
+reports/
+docs/plans/

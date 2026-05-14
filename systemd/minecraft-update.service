@@ -1,0 +1,11 @@
+[Unit]
+Description=Update Minecraft Mods via packwiz
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/minecraft-infra
+ExecStart=/opt/minecraft-infra/packwiz/scripts/update-mods.sh
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=minecraft-update

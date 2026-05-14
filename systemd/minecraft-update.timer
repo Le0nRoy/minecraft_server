@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly Minecraft Mod Update Check
+
+[Timer]
+OnCalendar=Mon *-*-* 03:00:00
+RandomizedDelaySec=600
+Persistent=true
+Unit=minecraft-update.service
+
+[Install]
+WantedBy=timers.target

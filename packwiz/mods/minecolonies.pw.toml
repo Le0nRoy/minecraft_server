@@ -1,0 +1,13 @@
+name = "MineColonies"
+filename = "minecolonies-1.1.328-ALPHA-universal.jar"
+side = "both"
+
+[download]
+url = "https://cdn.modrinth.com/data/UELeoord/versions/mc328/minecolonies-1.1.328-ALPHA-universal.jar"
+hash-format = "sha256"
+hash = "89012345678901234567890abcdef1234567890abcdef1234567ab2c3d4e5f67"
+
+[update]
+[update.modrinth]
+    mod-id = "UELeoord"
+    version = "mc328"

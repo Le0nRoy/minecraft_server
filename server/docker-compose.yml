@@ -1,0 +1,89 @@
+version: "3.8"
+
+services:
+  minecraft:
+    image: itzg/minecraft-server:latest
+    ports:
+      - "${SERVER_PORT}:25565"
+      - "${RCON_PORT}:25575"
+    env_file:
+      - ../.env
+    environment:
+      EULA: "TRUE"
+      VERSION: "${MINECRAFT_VERSION}"
+      TYPE: "FABRIC"
+      FABRIC_LOADER_VERSION: "${FABRIC_LOADER_VERSION}"
+      MEMORY: "${SERVER_MEMORY_MAX}"
+      INIT_MEMORY: "${SERVER_MEMORY_MIN}"
+      RCON_ENABLED: "true"
+      RCON_PORT: "25575"
+      RCON_PASSWORD: "${RCON_PASSWORD}"
+      DIFFICULTY: "normal"
+      OPS: ""
+      ALLOW_NETHER: "true"
+      MAX_PLAYERS: "20"
+      VIEW_DISTANCE: "10"
+      SIMULATION_DISTANCE: "8"
+      MOTD: "Welcome to the Modded Server"
+      USE_AIKAR_FLAGS: "true"
+      JVM_OPTS: "-XX:+UseG1GC -XX:+ParallelRefProcEnabled"
+      COPY_CONFIG_DEST: "/data"
+      SYNC_SKIP_NEWER_IN_DESTINATION: "false"
+      OVERRIDE_SERVER_PROPERTIES: "false"
+      MODS_FILE: "/data/packwiz-bootstrap.jar"
+    volumes:
+      - minecraft_data:/data
+      - ../packwiz:/packwiz:ro
+      - ./config:/config:ro
+    restart: unless-stopped
+    healthcheck:
+      test: mc-health
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    networks:
+      - minecraft
+    labels:
+      com.minecraft-server.service: "minecraft"
+      com.minecraft-server.version: "${MINECRAFT_VERSION}"
+
+  healthcheck-sidecar:
+    build:
+      context: ../healthcheck
+    ports:
+      - "${HEALTHCHECK_PORT}:8080"
+    environment:
+      RCON_HOST: "minecraft"
+      RCON_PORT: "25575"
+      RCON_PASSWORD: "${RCON_PASSWORD}"
+    depends_on:
+      - minecraft
+    networks:
+      - minecraft
+    restart: unless-stopped
+
+  telegram-bot:
+    build:
+      context: ../telegram-bot
+    environment:
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
+      TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID}"
+      MINECRAFT_HOST: "minecraft"
+      RCON_HOST: "minecraft"
+      RCON_PORT: "25575"
+      RCON_PASSWORD: "${RCON_PASSWORD}"
+    depends_on:
+      - minecraft
+    networks:
+      - minecraft
+    restart: unless-stopped
+    profiles:
+      - telegram
+
+volumes:
+  minecraft_data:
+
+networks:
+  minecraft:
+    driver: bridge

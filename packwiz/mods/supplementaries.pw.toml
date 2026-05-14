@@ -1,0 +1,13 @@
+name = "Supplementaries"
+filename = "supplementaries-1.20-2.7.28.jar"
+side = "both"
+
+[download]
+url = "https://cdn.modrinth.com/data/jwdMSMnm/versions/sp2728/supplementaries-1.20-2.7.28.jar"
+hash-format = "sha256"
+hash = "12345678901234567890abcdef1234567890abcdef1234567ab2c3d4e5f67890"
+
+[update]
+[update.modrinth]
+    mod-id = "jwdMSMnm"
+    version = "sp2728"

@@ -1,0 +1,113 @@
+hash-format = "sha256"
+
+[[files]]
+file = "mods/fabric-api.pw.toml"
+hash = ""
+
+[[files]]
+file = "mods/modern-industrialization.pw.toml"
+hash = ""
+
+[[files]]
+file = "mods/create-fabric.pw.toml"
+hash = ""
+
+[[files]]
+file = "mods/create-steam-n-rails.pw.toml"
+hash = ""
+
+[[files]]
+file = "mods/applied-energistics-2.pw.toml"
+hash = ""
+
+[[files]]
+file = "mods/pipez.pw.toml"
+hash = ""
+
+[[files]]
+file = "mods/integrated-dynamics.pw.toml"
+hash = ""
+
+[[files]]
+file = "mods/minecolonies.pw.toml"
+hash = ""
+
+[[files]]
+file = "mods/structurize.pw.toml"
+hash = ""
+
+[[files]]
+file = "mods/chipped.pw.toml"
+hash = ""
+
+[[files]]
+file = "mods/supplementaries.pw.toml"
+hash = ""
+
+[[files]]
+file = "mods/macaws-bridges.pw.toml"
+hash = ""
+
+[[files]]
+file = "mods/macaws-furniture.pw.toml"
+hash = ""
+
+[[files]]
+file = "mods/macaws-windows.pw.toml"
+hash = ""
+
+[[files]]
+file = "mods/macaws-doors.pw.toml"
+hash = ""
+
+[[files]]
+file = "mods/farmers-delight-fabric.pw.toml"
+hash = ""
+
+[[files]]
+file = "mods/terralith.pw.toml"
+hash = ""
+
+[[files]]
+file = "mods/rei.pw.toml"
+hash = ""
+
+[[files]]
+file = "mods/journeymap.pw.toml"
+hash = ""
+
+[[files]]
+file = "mods/inventory-profiles-next.pw.toml"
+hash = ""
+
+[[files]]
+file = "mods/mouse-tweaks.pw.toml"
+hash = ""
+
+[[files]]
+file = "mods/architectury-api.pw.toml"
+hash = ""
+
+[[files]]
+file = "mods/cloth-config.pw.toml"
+hash = ""
+
+[[files]]
+file = "mods/sodium.pw.toml"
+hash = ""
+
+[[files]]
+file = "mods/iris.pw.toml"
+hash = ""
+
+[[files]]
+file = "mods/litematica.pw.toml"
+hash = ""
+
+[[files]]
+file = "mods/worldedit-cui.pw.toml"
+hash = ""
+
+[[files]]
+file = "mods/effortless-building.pw.toml"
+hash = ""

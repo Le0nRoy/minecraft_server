@@ -1,0 +1,13 @@
+name = "Applied Energistics 2"
+filename = "appliedenergistics2-15.0.20-alpha.jar"
+side = "both"
+
+[download]
+url = "https://cdn.modrinth.com/data/XxWD5pD3/versions/ae2alpha/appliedenergistics2-15.0.20-alpha.jar"
+hash-format = "sha256"
+hash = "e5f6789012345678901234567890abcdef1234567890abcdef1234567ab2c3d4"
+
+[update]
+[update.modrinth]
+    mod-id = "XxWD5pD3"
+    version = "ae2alpha"
