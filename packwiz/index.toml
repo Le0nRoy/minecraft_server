@@ -76,6 +76,11 @@ hash = "450ed5663bf1d12ffddc78eda5aa56cb7808cbdac6db8102d18461361aaa555f"
 metafile = true
 
 [[files]]
+file = "mods/minecolonies.pw.toml"
+hash = "f9d8b192577fb715ed667c722e2e0c3aff9963e548d2b5b02c9d0b54cdc1b729"
+metafile = true
+
+[[files]]
 file = "mods/modern-industrialization.pw.toml"
 hash = "f273e625e82d20133e630064c1452b9331f32384ac01560d77a77bcec638352f"
 metafile = true
@@ -98,6 +103,11 @@ metafile = true
 [[files]]
 file = "mods/sodium.pw.toml"
 hash = "abc285fb28b8df872e4c2bb31e04fc23e2724d9c84b4cb6fbc4320fc569c758f"
+metafile = true
+
+[[files]]
+file = "mods/structurize.pw.toml"
+hash = "a60a69ddbe166aeff737df895ef94b18438a80010706c043531ccdb731a759a1"
 metafile = true
 
 [[files]]
