@@ -24,18 +24,22 @@ minecraft-inside.ru) — no way to verify file integrity, real risk of
 tampered jars (see the 2023 fractureiser incident for why this matters
 in the Minecraft mod ecosystem).
 
-### Remaining gap: still-missing required dependencies
+### Required dependencies — now resolved
 
 Per the MineColonies 1.1.1365 release notes, it hard-requires three
-more libraries that are **not yet in the pack**:
-- MultiPiston 1.2.51-1.21.1-snapshot (or above)
-- BlockUI 1.0.199-1.21.1-snapshot (or above)
-- Domum Ornamentum 1.0.223-snapshot (or above)
+more libraries. All three found on CurseForge (not Modrinth — same
+situation as MineColonies/Structurize, none of `multipiston`,
+`blockui`, `domum-ornamentum` resolve there) and added the same way:
+downloaded directly from CurseForge's CDN, hashed locally.
 
-None of these resolved on Modrinth under their obvious slugs
-(`multipiston`, `blockui`, `domum-ornamentum` all 404). They're likely
-also CurseForge-primary like MineColonies/Structurize were. **Without
-these three, MineColonies will not start.**
+- `multipiston.pw.toml` — file 7097877, project 303278,
+  `multipiston-1.2.58-1.21.1.jar`, NeoForge, MC 1.21.1.
+- `blockui.pw.toml` — file 7790469, project 522992,
+  `blockui-1.0.211-1.21.1-snapshot.jar`, NeoForge, MC 1.21.1.
+- `domum-ornamentum.pw.toml` — file 8311478, project 527361,
+  `domum-ornamentum-1.0.234-snapshot-main.jar`, NeoForge, MC 1.21.1.
+
+`index.toml` regenerated again — 28 entries total now.
 
 ### Action items
 - [x] Confirm NeoForge build availability for MineColonies/Structurize
@@ -43,7 +47,12 @@ these three, MineColonies will not start.**
 - [x] Source real download URL + hash — done, downloaded and hashed
       locally.
 - [x] Add both to `packwiz/mods/` and update `index.toml`.
-- [ ] Find and add MultiPiston, BlockUI, and Domum Ornamentum the same
+- [x] Find and add MultiPiston, BlockUI, and Domum Ornamentum the same
       way (CurseForge search + direct CDN download + local sha256).
 - [ ] Once all deps are in, do a real server boot test — this pack has
       never actually been launched, only assembled from metadata.
+- [ ] JEI, Journeymap-min-version, and Dynamic Trees are listed as
+      *optional* deps in the MineColonies changelog — JourneyMap is
+      already in the pack; JEI is not (REI is present instead, which
+      may or may not satisfy whatever soft-integration MineColonies
+      expects — worth checking in-game).

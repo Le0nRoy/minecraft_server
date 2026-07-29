@@ -11,6 +11,11 @@ hash = "187eafde5974beee1263538b462b7b8fe2fc8948c5d413980d9796d55928580b"
 metafile = true
 
 [[files]]
+file = "mods/blockui.pw.toml"
+hash = "424575ce83c84382fb1627b14ee9a1e63128d2b8e41decff5b81b59b4cae15bf"
+metafile = true
+
+[[files]]
 file = "mods/chipped.pw.toml"
 hash = "24c6c3fe917ffbcef04e788dec3e003d0ed03433bc00f9cf4f23fe9b85636aa7"
 metafile = true
@@ -23,6 +28,11 @@ metafile = true
 [[files]]
 file = "mods/create.pw.toml"
 hash = "dcaf5f2e28db0b9a127d0167456832341045ddc9aec058c3d9fcf53f618d2404"
+metafile = true
+
+[[files]]
+file = "mods/domum-ornamentum.pw.toml"
+hash = "c247dec7540e0a6f9d7cb0b244c2c7ac077e547cf96563d338934ee18dbdf801"
 metafile = true
 
 [[files]]
@@ -88,6 +98,11 @@ metafile = true
 [[files]]
 file = "mods/mouse-tweaks.pw.toml"
 hash = "bf8fe95846cd7a26b1e90c703abaa3963a122a938b5ed1710df1929a792054c9"
+metafile = true
+
+[[files]]
+file = "mods/multipiston.pw.toml"
+hash = "76f3083036b137988b447871a54a8a2801585bb476f8828dab4103c76fd63978"
 metafile = true
 
 [[files]]
