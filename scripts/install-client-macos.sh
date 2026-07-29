@@ -200,9 +200,10 @@ MaxMemAlloc=4096
 MinMemAlloc=1024
 OverrideJavaArgs=true
 JvmArgs=-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200
+OverrideCommands=true
+PreLaunchCommand="\$INST_JAVA" -jar packwiz-installer-bootstrap.jar ${PACKWIZ_PACK_URL}
 iconKey=default
 name=${PACK_NAME}
-PreLaunchCommand="\$INST_JAVA" -jar packwiz-installer-bootstrap.jar ${PACKWIZ_PACK_URL}
 EOF
 
     # --- mmc-pack.json ---
@@ -218,9 +219,12 @@ EOF
 }
 EOF
 
-    # --- Copy bootstrap jar ---
+    # --- Copy bootstrap jar into .minecraft ---
+    # Must live here: Prism runs PreLaunchCommand with the instance's
+    # .minecraft directory as its working directory, and the command
+    # above references the jar by relative path.
     info "Copying packwiz-installer-bootstrap.jar into instance..."
-    cp "${bootstrap_jar}" "${instance_dir}/packwiz-installer-bootstrap.jar"
+    cp "${bootstrap_jar}" "${instance_dir}/.minecraft/packwiz-installer-bootstrap.jar"
 
     success "Instance created at: ${instance_dir}"
 }

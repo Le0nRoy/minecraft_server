@@ -274,9 +274,10 @@ MaxMemAlloc=4096
 MinMemAlloc=1024
 OverrideJavaArgs=true
 JvmArgs=-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200
+OverrideCommands=true
+PreLaunchCommand="`$INST_JAVA" -jar packwiz-installer-bootstrap.jar $PackwizPackUrl
 iconKey=default
 name=$PackName
-PreLaunchCommand="`$INST_JAVA" -jar packwiz-installer-bootstrap.jar $PackwizPackUrl
 "@
     Set-Content -Path (Join-Path $instanceDir "instance.cfg") -Value $instanceCfg -Encoding UTF8
 
@@ -295,8 +296,11 @@ PreLaunchCommand="`$INST_JAVA" -jar packwiz-installer-bootstrap.jar $PackwizPack
     Set-Content -Path (Join-Path $instanceDir "mmc-pack.json") -Value $mmcPack -Encoding UTF8
 
     # --- packwiz-installer-bootstrap.jar ---
+    # Must live inside .minecraft: Prism runs PreLaunchCommand with the
+    # instance's .minecraft directory as its working directory, and the
+    # command above references the jar by relative path.
     Write-Step "Downloading packwiz-installer-bootstrap.jar into instance..."
-    $bootstrapDest = Join-Path $instanceDir "packwiz-installer-bootstrap.jar"
+    $bootstrapDest = Join-Path $minecraftDir "packwiz-installer-bootstrap.jar"
     Get-PackwizBootstrap -DestinationPath $bootstrapDest
 
     Write-OK "Instance created at: $instanceDir"
