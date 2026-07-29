@@ -1,5 +1,37 @@
 # TODO / Tech Debt
 
+## Real boot test results (2026-07-29) — 3 infra bugs found and fixed
+
+Ran the pack against the actual `itzg/minecraft-server` container (not
+just metadata checks). All three were pre-existing infra bugs, not
+new breakage from the NeoForge migration:
+
+1. **`server/docker-compose.yml`**: `MODS_FILE: "/data/packwiz-bootstrap.jar"`
+   pointed at a file nothing ever creates. Fixed to
+   `PACKWIZ_URL: "file:///packwiz/pack.toml"` (the correct itzg env var —
+   see https://docker-minecraft-server.readthedocs.io/en/latest/mods-and-plugins/packwiz/).
+2. **`packwiz/pack.toml`**: was missing the required `[index]` block
+   (file/hash-format/hash pointing at `index.toml`). packwiz-installer
+   refused to even parse the pack without it. Fixed.
+3. **`server/config/server.properties`** (git-tracked): has a
+   hardcoded empty `rcon.password=`. Since `COPY_CONFIG_DEST=/data`
+   copies this over `/data/server.properties` on every boot, the
+   `RCON_PASSWORD` env var from `.env` never actually takes effect —
+   RCON stays disabled regardless of what's in `.env`. **Not yet
+   fixed** — don't want to commit a real password into this tracked
+   file. Needs either: strip `rcon.password` from the template
+   entirely (so mc-image-helper's own env-based property injection
+   can set it, if `OVERRIDE_SERVER_PROPERTIES` allows), or move RCON
+   password injection to a startup script instead of a static file.
+
+With all 3 mods-related fixes applied, the full 38-mod pack booted
+clean: `Done (18.970s)!`, MineColonies completed full Compat Discovery
+(confirms its whole dependency chain — Structurize, MultiPiston,
+BlockUI, Domum Ornamentum — actually works at runtime, not just in
+theory). Also confirmed client/server mod-list enforcement works as
+expected (unmodded client gets cleanly rejected: `Incompatible client!
+Please use NeoForge 21.1.244`).
+
 ## MineColonies + Structurize (NeoForge 1.21.1)
 
 **Update:** MineColonies and Structurize have been added back to

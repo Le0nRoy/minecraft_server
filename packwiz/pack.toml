@@ -3,6 +3,11 @@ author = "ServerAdmin"
 version = "1.0.0"
 pack-format = "packwiz:1.1.0"
 
+[index]
+file = "index.toml"
+hash-format = "sha256"
+hash = "06695a892c9f034ea891de053013fb2ff8998f3d40920c746b8584ea3cf4159f"
+
 [versions]
 minecraft = "1.21.1"
 neoforge = "21.1.244"
