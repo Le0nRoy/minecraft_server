@@ -7,8 +7,8 @@
     This script:
       - Presents a native folder browser dialog so the user picks where to install
       - Verifies (or installs) Prism Launcher
-      - Verifies Java 17+ is present
-      - Creates a Fabric 1.20.1 Prism Launcher instance with packwiz bootstrap
+      - Verifies Java 21+ is present
+      - Creates a NeoForge 1.21.1 Prism Launcher instance with packwiz bootstrap
       - Shows a completion dialog with next steps
 
 .NOTES
@@ -24,12 +24,13 @@ $ErrorActionPreference = 'Stop'
 # Constants
 # ---------------------------------------------------------------------------
 
-$PackName         = "Minecraft Infra Pack 1.20.1"
+$PackName         = "Minecraft Infra Pack 1.21.1 (NeoForge)"
 $InstanceDirName  = "minecraft-infra-pack"
-$McVersion        = "1.20.1"
-$FabricVersion    = "0.15.11"
+$McVersion        = "1.21.1"
+$NeoForgeVersion  = "21.1.244"
+$LwjglVersion     = "3.3.3"
 $BootstrapUrl     = "https://github.com/packwiz/packwiz-installer-bootstrap/releases/latest/download/packwiz-installer-bootstrap.jar"
-$PackwizPackUrl   = "https://raw.githubusercontent.com/YOUR_ORG/minecraft-infra/main/packwiz/pack.toml"
+$PackwizPackUrl   = "https://raw.githubusercontent.com/Le0nRoy/minecraft_server/neoforge-1.21.1-migration/packwiz/pack.toml"
 $PrismDownloadUrl = "https://prismlauncher.org/download/windows"
 $PrismDirectUrl   = "https://github.com/PrismLauncher/PrismLauncher/releases/latest/download/PrismLauncher-Windows-Setup.exe"
 
@@ -182,7 +183,7 @@ function Install-PrismLauncher {
 }
 
 # ---------------------------------------------------------------------------
-# Step 3 — Check Java 17+
+# Step 3 — Check Java 21+
 # ---------------------------------------------------------------------------
 
 function Test-JavaVersion {
@@ -281,16 +282,16 @@ PreLaunchCommand="`$INST_JAVA" -jar packwiz-installer-bootstrap.jar $PackwizPack
 
     # --- mmc-pack.json ---
     Write-Step "Writing mmc-pack.json..."
-    $mmcPack = @'
+    $mmcPack = @"
 {
   "components": [
-    {"cachedName": "LWJGL 3", "dependencyOnly": true, "uid": "org.lwjgl3", "version": "3.3.1"},
-    {"cachedName": "Minecraft", "uid": "net.minecraft", "version": "1.20.1"},
-    {"cachedName": "Fabric Loader", "uid": "net.fabricmc.fabric-loader", "version": "0.15.11"}
+    {"cachedName": "LWJGL 3", "dependencyOnly": true, "uid": "org.lwjgl3", "version": "$LwjglVersion"},
+    {"cachedName": "Minecraft", "important": true, "uid": "net.minecraft", "version": "$McVersion"},
+    {"cachedName": "NeoForge", "uid": "net.neoforged", "version": "$NeoForgeVersion"}
   ],
   "formatVersion": 1
 }
-'@
+"@
     Set-Content -Path (Join-Path $instanceDir "mmc-pack.json") -Value $mmcPack -Encoding UTF8
 
     # --- packwiz-installer-bootstrap.jar ---
@@ -337,17 +338,17 @@ function Main {
         $javaFound, $javaVersion = Test-JavaVersion
         if (-not $javaFound) {
             $javaAnswer = Show-MessageBox `
-                -Message "Java does not appear to be installed or is not on the PATH.`n`nMinecraft $McVersion requires Java 17 or newer.`n`nWould you like to open the Java download page?" `
+                -Message "Java does not appear to be installed or is not on the PATH.`n`nMinecraft $McVersion requires Java 21 or newer.`n`nWould you like to open the Java 21 download page?" `
                 -Title "Java Not Found" `
                 -Buttons YesNo `
                 -Icon Warning
 
             if ($javaAnswer -eq [System.Windows.Forms.DialogResult]::Yes) {
-                Start-Process "https://adoptium.net/temurin/releases/?version=17"
+                Start-Process "https://adoptium.net/temurin/releases/?version=21"
             }
 
             $continueAnyway = Show-MessageBox `
-                -Message "Continue installation without verifying Java?`n`nThe instance will be created but may not launch until Java 17+ is installed." `
+                -Message "Continue installation without verifying Java?`n`nThe instance will be created but may not launch until Java 21+ is installed." `
                 -Title "Continue Without Java?" `
                 -Buttons YesNo `
                 -Icon Question
@@ -355,19 +356,19 @@ function Main {
             if ($continueAnyway -ne [System.Windows.Forms.DialogResult]::Yes) {
                 exit 1
             }
-        } elseif ($javaVersion -ne -1 -and $javaVersion -lt 17) {
+        } elseif ($javaVersion -ne -1 -and $javaVersion -lt 21) {
             $javaAnswer = Show-MessageBox `
-                -Message "Java $javaVersion detected, but Minecraft $McVersion requires Java 17 or newer.`n`nWould you like to open the Java 17 download page?" `
+                -Message "Java $javaVersion detected, but Minecraft $McVersion requires Java 21 or newer.`n`nWould you like to open the Java 21 download page?" `
                 -Title "Java Version Too Old" `
                 -Buttons YesNo `
                 -Icon Warning
 
             if ($javaAnswer -eq [System.Windows.Forms.DialogResult]::Yes) {
-                Start-Process "https://adoptium.net/temurin/releases/?version=17"
+                Start-Process "https://adoptium.net/temurin/releases/?version=21"
             }
 
             $continueAnyway = Show-MessageBox `
-                -Message "Continue installation with Java $javaVersion?`n`nThe instance will be created but may not launch until Java 17+ is configured." `
+                -Message "Continue installation with Java $javaVersion?`n`nThe instance will be created but may not launch until Java 21+ is configured." `
                 -Title "Continue With Old Java?" `
                 -Buttons YesNo `
                 -Icon Question
@@ -377,7 +378,7 @@ function Main {
             }
         } else {
             if ($javaVersion -eq -1) {
-                Write-OK "Java detected (version could not be parsed — verify it is 17+)."
+                Write-OK "Java detected (version could not be parsed — verify it is 21+)."
             } else {
                 Write-OK "Java $javaVersion detected."
             }

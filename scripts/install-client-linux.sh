@@ -8,9 +8,9 @@
 #
 # The script will:
 #   1. Locate (or offer to install) Prism Launcher
-#   2. Verify Java 17+ is available
+#   2. Verify Java 21+ is available
 #   3. Download packwiz-installer-bootstrap.jar
-#   4. Create a fully configured Prism Launcher instance for Fabric 1.20.1
+#   4. Create a fully configured Prism Launcher instance for NeoForge 1.21.1
 #   5. Configure packwiz bootstrap so mods sync automatically on launch
 
 set -euo pipefail
@@ -19,12 +19,13 @@ set -euo pipefail
 # Constants
 # ---------------------------------------------------------------------------
 
-PACK_NAME="Minecraft Infra Pack 1.20.1"
+PACK_NAME="Minecraft Infra Pack 1.21.1 (NeoForge)"
 INSTANCE_DIRNAME="minecraft-infra-pack"
 PACKWIZ_BOOTSTRAP_URL="https://github.com/packwiz/packwiz-installer-bootstrap/releases/latest/download/packwiz-installer-bootstrap.jar"
-PACKWIZ_PACK_URL="https://raw.githubusercontent.com/YOUR_ORG/minecraft-infra/main/packwiz/pack.toml"
-MC_VERSION="1.20.1"
-FABRIC_VERSION="0.15.11"
+PACKWIZ_PACK_URL="https://raw.githubusercontent.com/Le0nRoy/minecraft_server/neoforge-1.21.1-migration/packwiz/pack.toml"
+MC_VERSION="1.21.1"
+NEOFORGE_VERSION="21.1.244"
+LWJGL_VERSION="3.3.3"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -132,19 +133,19 @@ offer_install_prism() {
 }
 
 # ---------------------------------------------------------------------------
-# Step 2 — Check Java 17+
+# Step 2 — Check Java 21+
 # ---------------------------------------------------------------------------
 
 check_java() {
     if ! command -v java &>/dev/null; then
         warn "Java is not installed or not on PATH."
-        echo "  Minecraft ${MC_VERSION} requires Java 17 or newer."
+        echo "  Minecraft ${MC_VERSION} requires Java 21 or newer."
         echo "  Install it from your package manager, for example:"
-        echo "    sudo apt install openjdk-17-jre       (Debian/Ubuntu)"
-        echo "    sudo dnf install java-17-openjdk      (Fedora/RHEL)"
-        echo "    sudo pacman -S jre17-openjdk           (Arch)"
-        echo "    flatpak install flathub org.freedesktop.Sdk.Extension.openjdk17"
-        die "Please install Java 17+ and re-run."
+        echo "    sudo apt install openjdk-21-jre       (Debian/Ubuntu)"
+        echo "    sudo dnf install java-21-openjdk      (Fedora/RHEL)"
+        echo "    sudo pacman -S jre21-openjdk           (Arch)"
+        echo "    flatpak install flathub org.freedesktop.Sdk.Extension.openjdk21"
+        die "Please install Java 21+ and re-run."
     fi
 
     local version_output
@@ -155,12 +156,12 @@ check_java() {
 
     if [[ -z "${major}" ]]; then
         warn "Could not determine Java version from: ${version_output}"
-        warn "Proceeding anyway — ensure Java 17+ is available."
+        warn "Proceeding anyway — ensure Java 21+ is available."
         return 0
     fi
 
-    if (( major < 17 )); then
-        die "Java ${major} detected, but Minecraft ${MC_VERSION} requires Java 17 or newer. Please upgrade."
+    if (( major < 21 )); then
+        die "Java ${major} detected, but Minecraft ${MC_VERSION} requires Java 21 or newer. Please upgrade."
     fi
 
     success "Java ${major} detected."
@@ -228,12 +229,12 @@ EOF
 
     # --- mmc-pack.json ---
     info "Writing mmc-pack.json..."
-    cat > "${instance_dir}/mmc-pack.json" <<'EOF'
+    cat > "${instance_dir}/mmc-pack.json" <<EOF
 {
   "components": [
-    {"cachedName": "LWJGL 3", "dependencyOnly": true, "uid": "org.lwjgl3", "version": "3.3.1"},
-    {"cachedName": "Minecraft", "uid": "net.minecraft", "version": "1.20.1"},
-    {"cachedName": "Fabric Loader", "uid": "net.fabricmc.fabric-loader", "version": "0.15.11"}
+    {"cachedName": "LWJGL 3", "dependencyOnly": true, "uid": "org.lwjgl3", "version": "${LWJGL_VERSION}"},
+    {"cachedName": "Minecraft", "important": true, "uid": "net.minecraft", "version": "${MC_VERSION}"},
+    {"cachedName": "NeoForge", "uid": "net.neoforged", "version": "${NEOFORGE_VERSION}"}
   ],
   "formatVersion": 1
 }

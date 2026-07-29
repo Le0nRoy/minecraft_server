@@ -6,9 +6,9 @@
 # The script will:
 #   1. Present a native macOS folder picker to choose install location
 #   2. Locate Prism Launcher in ~/Applications or /Applications
-#   3. Verify Java 17+ is available
+#   3. Verify Java 21+ is available
 #   4. Download packwiz-installer-bootstrap.jar
-#   5. Create a fully configured Prism Launcher instance for Fabric 1.20.1
+#   5. Create a fully configured Prism Launcher instance for NeoForge 1.21.1
 #   6. Configure packwiz bootstrap so mods sync automatically on launch
 
 set -euo pipefail
@@ -17,12 +17,13 @@ set -euo pipefail
 # Constants
 # ---------------------------------------------------------------------------
 
-PACK_NAME="Minecraft Infra Pack 1.20.1"
+PACK_NAME="Minecraft Infra Pack 1.21.1 (NeoForge)"
 INSTANCE_DIRNAME="minecraft-infra-pack"
 PACKWIZ_BOOTSTRAP_URL="https://github.com/packwiz/packwiz-installer-bootstrap/releases/latest/download/packwiz-installer-bootstrap.jar"
-PACKWIZ_PACK_URL="https://raw.githubusercontent.com/YOUR_ORG/minecraft-infra/main/packwiz/pack.toml"
-MC_VERSION="1.20.1"
-FABRIC_VERSION="0.15.11"
+PACKWIZ_PACK_URL="https://raw.githubusercontent.com/Le0nRoy/minecraft_server/neoforge-1.21.1-migration/packwiz/pack.toml"
+MC_VERSION="1.21.1"
+NEOFORGE_VERSION="21.1.244"
+LWJGL_VERSION="3.3.3"
 PRISM_DOWNLOAD_URL="https://prismlauncher.org/download/mac"
 
 # ---------------------------------------------------------------------------
@@ -99,33 +100,33 @@ offer_install_prism() {
 }
 
 # ---------------------------------------------------------------------------
-# Step 3 — Check Java 17+
+# Step 3 — Check Java 21+
 # ---------------------------------------------------------------------------
 
 check_java() {
     # macOS ships with a java stub that prompts to install JDK; we skip that
-    if ! /usr/libexec/java_home -v 17 &>/dev/null 2>&1; then
+    if ! /usr/libexec/java_home -v 21 &>/dev/null 2>&1; then
         # Fallback: check $PATH
         if ! command -v java &>/dev/null; then
-            warn "Java 17+ is not installed."
-            echo "  Minecraft ${MC_VERSION} requires Java 17 or newer."
+            warn "Java 21+ is not installed."
+            echo "  Minecraft ${MC_VERSION} requires Java 21 or newer."
             echo ""
             echo "  Install options:"
-            echo "    1. Homebrew:    brew install --cask temurin@17"
-            echo "    2. Download:    https://adoptium.net/temurin/releases/?version=17"
+            echo "    1. Homebrew:    brew install --cask temurin@21"
+            echo "    2. Download:    https://adoptium.net/temurin/releases/?version=21"
             echo ""
             read -r -p "  Open the download page now? [Y/n] " answer
             if [[ "${answer,,}" != "n" ]]; then
-                open "https://adoptium.net/temurin/releases/?version=17"
+                open "https://adoptium.net/temurin/releases/?version=21"
             fi
-            die "Please install Java 17+ and re-run."
+            die "Please install Java 21+ and re-run."
         fi
     fi
 
     # Use JAVA_HOME from java_home helper if available
     local java_bin="java"
-    if /usr/libexec/java_home -v 17 &>/dev/null 2>&1; then
-        java_bin="$(/usr/libexec/java_home -v 17)/bin/java"
+    if /usr/libexec/java_home -v 21 &>/dev/null 2>&1; then
+        java_bin="$(/usr/libexec/java_home -v 21)/bin/java"
     fi
 
     local version_output
@@ -135,12 +136,12 @@ check_java() {
 
     if [[ -z "${major}" ]]; then
         warn "Could not parse Java version from: ${version_output}"
-        warn "Proceeding anyway — ensure Java 17+ is configured in Prism Launcher."
+        warn "Proceeding anyway — ensure Java 21+ is configured in Prism Launcher."
         return 0
     fi
 
-    if (( major < 17 )); then
-        die "Java ${major} detected, but Minecraft ${MC_VERSION} requires Java 17 or newer."
+    if (( major < 21 )); then
+        die "Java ${major} detected, but Minecraft ${MC_VERSION} requires Java 21 or newer."
     fi
 
     success "Java ${major} detected."
@@ -206,12 +207,12 @@ EOF
 
     # --- mmc-pack.json ---
     info "Writing mmc-pack.json..."
-    cat > "${instance_dir}/mmc-pack.json" <<'EOF'
+    cat > "${instance_dir}/mmc-pack.json" <<EOF
 {
   "components": [
-    {"cachedName": "LWJGL 3", "dependencyOnly": true, "uid": "org.lwjgl3", "version": "3.3.1"},
-    {"cachedName": "Minecraft", "uid": "net.minecraft", "version": "1.20.1"},
-    {"cachedName": "Fabric Loader", "uid": "net.fabricmc.fabric-loader", "version": "0.15.11"}
+    {"cachedName": "LWJGL 3", "dependencyOnly": true, "uid": "org.lwjgl3", "version": "${LWJGL_VERSION}"},
+    {"cachedName": "Minecraft", "important": true, "uid": "net.minecraft", "version": "${MC_VERSION}"},
+    {"cachedName": "NeoForge", "uid": "net.neoforged", "version": "${NEOFORGE_VERSION}"}
   ],
   "formatVersion": 1
 }
