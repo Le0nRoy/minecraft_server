@@ -1,13 +1,13 @@
 name = "Macaw's Furniture"
-filename = "mcw-furniture-3.3.0-mc1.20.1fabric.jar"
+filename = "mcw-furniture-3.4.1-mc1.21.1neoforge.jar"
 side = "both"
 
 [download]
-url = "https://cdn.modrinth.com/data/9IQrlCmU/versions/mf330/mcw-furniture-3.3.0-mc1.20.1fabric.jar"
-hash-format = "sha256"
-hash = "345678901234567890abcdef1234567890abcdef1234567ab2c3d4e5f6789012"
+url = "https://cdn.modrinth.com/data/dtWC90iB/versions/Z5V3Ps7S/mcw-furniture-3.4.1-mc1.21.1neoforge.jar"
+hash-format = "sha512"
+hash = "93103f868a6a7b4fa613dbe908bcf83c4aaabf4719057d484d1636c98e6e3defa00d550a8988ff91d4d0a090463c25b898336e675da52c19bd3bd0ce37e053e4"
 
 [update]
 [update.modrinth]
-    mod-id = "9IQrlCmU"
-    version = "mf330"
+mod-id = "dtWC90iB"
+version = "Z5V3Ps7S"
