@@ -56,3 +56,30 @@ downloaded directly from CurseForge's CDN, hashed locally.
       already in the pack; JEI is not (REI is present instead, which
       may or may not satisfy whatever soft-integration MineColonies
       expects — worth checking in-game).
+
+## Full-pack dependency audit (2026-07-29)
+
+Checked every Modrinth-sourced mod's real declared `dependencies`
+field (not guesswork) plus jar-in-jar contents, for NeoForge 1.21.1.
+Found 9 more required libraries missing, none embedded jar-in-jar:
+
+| Mod that needs it | Library added |
+|---|---|
+| Modern Industrialization, Applied Energistics 2 | GuideME |
+| Integrated Dynamics | Common Capabilities, Cyclops Core |
+| Chipped | Athena, Resourceful Lib |
+| Supplementaries | Moonlight Lib |
+| Terralith | Lithostitched |
+| Inventory Profiles Next | Kotlin for Forge, libIPN |
+
+All 9 added (`packwiz/mods/`), `index.toml` regenerated — 37 entries
+total now. Transitive deps checked too (Common Capabilities needs
+Cyclops Core, libIPN needs Kotlin for Forge — both already covered).
+
+- [x] Full dependency audit across all 28 mods (now 37 with libs).
+- [ ] **Still open:** WorldEdit CUI (Unofficial Forge Port) is in the
+      pack but the base **WorldEdit** mod is not — CUI is a visual
+      overlay only, does nothing without WorldEdit itself installed.
+      Not a crash risk, just a dead mod until WorldEdit is added.
+- [ ] Still no real boot test performed — do this before calling the
+      pack "done."

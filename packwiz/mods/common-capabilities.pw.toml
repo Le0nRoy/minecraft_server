@@ -1,0 +1,13 @@
+name = "Common Capabilities"
+filename = "commoncapabilities-1.21.1-neoforge-2.11.5-363.jar"
+side = "both"
+
+[download]
+url = "https://cdn.modrinth.com/data/oFXrCkDI/versions/TOl9njea/commoncapabilities-1.21.1-neoforge-2.11.5-363.jar"
+hash-format = "sha512"
+hash = "ae852dc5d7b5857e3be4c8c7fd5fcdd4e4fda8f649747315e1d78528becadfeaa01856acedafedb400eb4ca2a3f39d8c85e839e8606e0ba535cbba2bd8030b1e"
+
+[update]
+[update.modrinth]
+mod-id = "oFXrCkDI"
+version = "TOl9njea"
