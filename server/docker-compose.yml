@@ -11,8 +11,8 @@ services:
     environment:
       EULA: "TRUE"
       VERSION: "${MINECRAFT_VERSION}"
-      TYPE: "FABRIC"
-      FABRIC_LOADER_VERSION: "${FABRIC_LOADER_VERSION}"
+      TYPE: "NEOFORGE"
+      NEOFORGE_VERSION: "${NEOFORGE_VERSION}"
       MEMORY: "${SERVER_MEMORY_MAX}"
       INIT_MEMORY: "${SERVER_MEMORY_MIN}"
       RCON_ENABLED: "true"
@@ -30,7 +30,7 @@ services:
       COPY_CONFIG_DEST: "/data"
       SYNC_SKIP_NEWER_IN_DESTINATION: "false"
       OVERRIDE_SERVER_PROPERTIES: "false"
-      MODS_FILE: "/data/packwiz-bootstrap.jar"
+      PACKWIZ_URL: "file:///packwiz/pack.toml"
     volumes:
       - minecraft_data:/data
       - ../packwiz:/packwiz:ro

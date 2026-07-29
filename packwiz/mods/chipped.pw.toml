@@ -1,13 +1,13 @@
 name = "Chipped"
-filename = "chipped-fabric-1.20.1-3.0.3.jar"
+filename = "chipped-neoforge-1.21.1-4.0.2.jar"
 side = "both"
 
 [download]
-url = "https://cdn.modrinth.com/data/oZ7KFGip/versions/ch303/chipped-fabric-1.20.1-3.0.3.jar"
-hash-format = "sha256"
-hash = "012345678901234567890abcdef1234567890abcdef1234567ab2c3d4e5f6789"
+url = "https://cdn.modrinth.com/data/BAscRYKm/versions/eqVowbGc/chipped-neoforge-1.21.1-4.0.2.jar"
+hash-format = "sha512"
+hash = "f3083b01267e7c674c4b42f45a317c93ee7723443cba2051fe5bc593638b533b0fe90699e2101661c934dff458eab693cce4e188533bfe977778c249563a2fa5"
 
 [update]
 [update.modrinth]
-    mod-id = "oZ7KFGip"
-    version = "ch303"
+mod-id = "BAscRYKm"
+version = "eqVowbGc"

@@ -1,113 +1,206 @@
 hash-format = "sha256"
 
 [[files]]
-file = "mods/fabric-api.pw.toml"
-hash = ""
-
-[[files]]
-file = "mods/modern-industrialization.pw.toml"
-hash = ""
-
-[[files]]
-file = "mods/create-fabric.pw.toml"
-hash = ""
-
-[[files]]
-file = "mods/create-steam-n-rails.pw.toml"
-hash = ""
-
-[[files]]
 file = "mods/applied-energistics-2.pw.toml"
-hash = ""
-
-[[files]]
-file = "mods/pipez.pw.toml"
-hash = ""
-
-[[files]]
-file = "mods/integrated-dynamics.pw.toml"
-hash = ""
-
-[[files]]
-file = "mods/minecolonies.pw.toml"
-hash = ""
-
-[[files]]
-file = "mods/structurize.pw.toml"
-hash = ""
-
-[[files]]
-file = "mods/chipped.pw.toml"
-hash = ""
-
-[[files]]
-file = "mods/supplementaries.pw.toml"
-hash = ""
-
-[[files]]
-file = "mods/macaws-bridges.pw.toml"
-hash = ""
-
-[[files]]
-file = "mods/macaws-furniture.pw.toml"
-hash = ""
-
-[[files]]
-file = "mods/macaws-windows.pw.toml"
-hash = ""
-
-[[files]]
-file = "mods/macaws-doors.pw.toml"
-hash = ""
-
-[[files]]
-file = "mods/farmers-delight-fabric.pw.toml"
-hash = ""
-
-[[files]]
-file = "mods/terralith.pw.toml"
-hash = ""
-
-[[files]]
-file = "mods/rei.pw.toml"
-hash = ""
-
-[[files]]
-file = "mods/journeymap.pw.toml"
-hash = ""
-
-[[files]]
-file = "mods/inventory-profiles-next.pw.toml"
-hash = ""
-
-[[files]]
-file = "mods/mouse-tweaks.pw.toml"
-hash = ""
+hash = "ed45c352a49b65c7221e57d979d0c6935522dfef4968aa5b7421f4d3e670ce40"
+metafile = true
 
 [[files]]
 file = "mods/architectury-api.pw.toml"
-hash = ""
+hash = "187eafde5974beee1263538b462b7b8fe2fc8948c5d413980d9796d55928580b"
+metafile = true
+
+[[files]]
+file = "mods/athena.pw.toml"
+hash = "3434f9ec77694349b7b83e79ef179be25c8eeae83049a75d154098edb5a19889"
+metafile = true
+
+[[files]]
+file = "mods/blockui.pw.toml"
+hash = "424575ce83c84382fb1627b14ee9a1e63128d2b8e41decff5b81b59b4cae15bf"
+metafile = true
+
+[[files]]
+file = "mods/chipped.pw.toml"
+hash = "24c6c3fe917ffbcef04e788dec3e003d0ed03433bc00f9cf4f23fe9b85636aa7"
+metafile = true
 
 [[files]]
 file = "mods/cloth-config.pw.toml"
-hash = ""
+hash = "75181b55e0407d1fca1e2f346c6501f919f5109545990ddfb66db9cd1b771f8a"
+metafile = true
 
 [[files]]
-file = "mods/sodium.pw.toml"
-hash = ""
+file = "mods/common-capabilities.pw.toml"
+hash = "a4fa14c80e298c2d811ebbbcb0148b880a0de16c3f91f766472d140a68065e16"
+metafile = true
 
 [[files]]
-file = "mods/iris.pw.toml"
-hash = ""
+file = "mods/create.pw.toml"
+hash = "dcaf5f2e28db0b9a127d0167456832341045ddc9aec058c3d9fcf53f618d2404"
+metafile = true
 
 [[files]]
-file = "mods/litematica.pw.toml"
-hash = ""
+file = "mods/cyclops-core.pw.toml"
+hash = "46e5e4daa7779a0af8eddd7f52fecf54b27af17ea6747ef04c18fab63ecb9922"
+metafile = true
 
 [[files]]
-file = "mods/worldedit-cui.pw.toml"
-hash = ""
+file = "mods/domum-ornamentum.pw.toml"
+hash = "c247dec7540e0a6f9d7cb0b244c2c7ac077e547cf96563d338934ee18dbdf801"
+metafile = true
 
 [[files]]
 file = "mods/effortless-building.pw.toml"
-hash = ""
+hash = "ff19d1c39fa143e095b7603feb004c86751bb0ce28040ad5cfeee8a25966ef4b"
+metafile = true
+
+[[files]]
+file = "mods/farmers-delight.pw.toml"
+hash = "9aab64fbec4cc794817026caf84e7d0dff14ba3892da94aa0e00d23c84560499"
+metafile = true
+
+[[files]]
+file = "mods/guideme.pw.toml"
+hash = "f7448243d61c3e7c5941896816afb91dd069cef492a2d93ceba9f48e391cdf44"
+metafile = true
+
+[[files]]
+file = "mods/integrated-dynamics.pw.toml"
+hash = "888d4264484fa2dba09d1e8a964bb28f2a4fcb641af5373d752aa3a4ada50aad"
+metafile = true
+
+[[files]]
+file = "mods/inventory-profiles-next.pw.toml"
+hash = "29f7b8940725943a7cb56e903e0eb94b5c5a43ec81cb6f25179b76aa5dfd1411"
+metafile = true
+
+[[files]]
+file = "mods/iris.pw.toml"
+hash = "db1c1e6382878b78e994dba1b9026935f8d1c5ca685c89d2437858e0a0dcab58"
+metafile = true
+
+[[files]]
+file = "mods/journeymap.pw.toml"
+hash = "66a57cc8d304db7381210763955db9be51ca984c29292dc7ede40b40816130d0"
+metafile = true
+
+[[files]]
+file = "mods/kotlin-for-forge.pw.toml"
+hash = "712a69b3569a8055979de6eea262068535fe182dffb3833e53e5833e9cbf9766"
+metafile = true
+
+[[files]]
+file = "mods/libipn.pw.toml"
+hash = "b73c0859f4e434669bb9799e561c23c78661eb30d15c632d1baca0c92faadcc2"
+metafile = true
+
+[[files]]
+file = "mods/lithostitched.pw.toml"
+hash = "e06a9a886181277591baeb9e82b484bd6204fe3aec0ffc8781bb05bb11b4d1a9"
+metafile = true
+
+[[files]]
+file = "mods/macaws-bridges.pw.toml"
+hash = "0c961c709297bcc89f2f07e1eb1049e4d21a331adb020f1786e5a9a0883e037c"
+metafile = true
+
+[[files]]
+file = "mods/macaws-doors.pw.toml"
+hash = "b00f8b696187f092a939b7bbbf2ad2f249665776465bac594e2d0f4f37d36dc4"
+metafile = true
+
+[[files]]
+file = "mods/macaws-furniture.pw.toml"
+hash = "52019f01292cb860fa135485f941fff42f97910267bf122f2f797e31109bb93f"
+metafile = true
+
+[[files]]
+file = "mods/macaws-windows.pw.toml"
+hash = "450ed5663bf1d12ffddc78eda5aa56cb7808cbdac6db8102d18461361aaa555f"
+metafile = true
+
+[[files]]
+file = "mods/minecolonies.pw.toml"
+hash = "f9d8b192577fb715ed667c722e2e0c3aff9963e548d2b5b02c9d0b54cdc1b729"
+metafile = true
+
+[[files]]
+file = "mods/modern-industrialization.pw.toml"
+hash = "f273e625e82d20133e630064c1452b9331f32384ac01560d77a77bcec638352f"
+metafile = true
+
+[[files]]
+file = "mods/moonlight.pw.toml"
+hash = "688a2fcd58d20df93c57e571b054b3c582932a795a255dc13c65b055dc1880b1"
+metafile = true
+
+[[files]]
+file = "mods/mouse-tweaks.pw.toml"
+hash = "bf8fe95846cd7a26b1e90c703abaa3963a122a938b5ed1710df1929a792054c9"
+metafile = true
+
+[[files]]
+file = "mods/multipiston.pw.toml"
+hash = "76f3083036b137988b447871a54a8a2801585bb476f8828dab4103c76fd63978"
+metafile = true
+
+[[files]]
+file = "mods/pipez.pw.toml"
+hash = "03c2188c7c5aa4407964fd3bb20074b52eb2adf8897c3a22897cc037446450ce"
+metafile = true
+
+[[files]]
+file = "mods/rei.pw.toml"
+hash = "21388a8519fbba93d4663a40bb163932855213ec47f41af18c1d3a4a1e2ada93"
+metafile = true
+
+[[files]]
+file = "mods/resourceful-lib.pw.toml"
+hash = "c0b066684294c33972d562e0cb08ea17b2d31bcf86cd1d6c63b8e968f0eac7a2"
+metafile = true
+
+[[files]]
+file = "mods/sodium-dynamic-lights.pw.toml"
+hash = "c1e526d3d17cb3563e596d45c7567ed1fe60c31bdc3457f7a747ef8150bd3c1b"
+metafile = true
+
+[[files]]
+file = "mods/sodium-extra.pw.toml"
+hash = "c490445e40a84c9e19bd3d3a7c8e8b9709b8cea0346a307eb7fb8a32a72a9504"
+metafile = true
+
+[[files]]
+file = "mods/sodium-options-api.pw.toml"
+hash = "d193173f0f5dfb4a921d44e29e8d5cee656dd3a40872939069715bb482b66fc9"
+metafile = true
+
+[[files]]
+file = "mods/sodium.pw.toml"
+hash = "abc285fb28b8df872e4c2bb31e04fc23e2724d9c84b4cb6fbc4320fc569c758f"
+metafile = true
+
+[[files]]
+file = "mods/structurize.pw.toml"
+hash = "a60a69ddbe166aeff737df895ef94b18438a80010706c043531ccdb731a759a1"
+metafile = true
+
+[[files]]
+file = "mods/supplementaries.pw.toml"
+hash = "805c7b44181e5826bdbf4fcc21b14d93cd8ff656747356d325a5cb81a8fa3de5"
+metafile = true
+
+[[files]]
+file = "mods/terralith.pw.toml"
+hash = "81c5c05f9ed4c07b9f027ff6c421939bb04e476075091f135d34aaa05af1f950"
+metafile = true
+
+[[files]]
+file = "mods/worldedit.pw.toml"
+hash = "de999f6cc4c2f344e324b4f331fa9767844c31463c6e8066fcd67b613338ab8c"
+metafile = true
+
+[[files]]
+file = "mods/worldeditcui-forge.pw.toml"
+hash = "26da583167cf97e2dd89bdf738dd2ad1358237c2b87ce3b593f47f6df1269df5"
+metafile = true
