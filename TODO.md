@@ -77,9 +77,8 @@ total now. Transitive deps checked too (Common Capabilities needs
 Cyclops Core, libIPN needs Kotlin for Forge — both already covered).
 
 - [x] Full dependency audit across all 28 mods (now 37 with libs).
-- [ ] **Still open:** WorldEdit CUI (Unofficial Forge Port) is in the
-      pack but the base **WorldEdit** mod is not — CUI is a visual
-      overlay only, does nothing without WorldEdit itself installed.
-      Not a crash risk, just a dead mod until WorldEdit is added.
+- [x] Added base **WorldEdit** (7.3.8, NeoForge, MC 1.21.1, no
+      dependencies) so WorldEdit CUI has something to attach to.
+      `index.toml` now 38 entries.
 - [ ] Still no real boot test performed — do this before calling the
       pack "done."
