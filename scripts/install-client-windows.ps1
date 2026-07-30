@@ -8,7 +8,7 @@
       - Verifies (or installs) Prism Launcher
       - Verifies (or installs) Java 21+
       - Locates Prism Launcher's real "instances" directory and creates the
-        NeoForge 1.21.1 instance directly inside it — no manual folder
+        NeoForge 1.21.1 instance directly inside it - no manual folder
         picking or copying required
       - Falls back to a folder picker only if Prism's instances directory
         cannot be determined automatically
@@ -77,7 +77,7 @@ function Write-Fail {
 }
 
 # ---------------------------------------------------------------------------
-# Step 1 — Locate or install Prism Launcher
+# Step 1 - Locate or install Prism Launcher
 # ---------------------------------------------------------------------------
 
 function Find-PrismLauncher {
@@ -140,7 +140,7 @@ function Install-PrismLauncher {
     } else {
         Start-Process $PrismDownloadUrl
         Show-MessageBox `
-            -Message "Please install Prism Launcher (pick whatever location you like), then re-run this script — it will find it automatically." `
+            -Message "Please install Prism Launcher (pick whatever location you like), then re-run this script - it will find it automatically." `
             -Title "Manual Installation Required" `
             -Icon Information
         exit 0
@@ -160,7 +160,7 @@ function Install-PrismLauncher {
 }
 
 # ---------------------------------------------------------------------------
-# Step 2 — Locate Prism Launcher's real "instances" directory
+# Step 2 - Locate Prism Launcher's real "instances" directory
 # ---------------------------------------------------------------------------
 
 function Get-PrismInstancesDir {
@@ -183,7 +183,7 @@ function Get-PrismInstancesDir {
 }
 
 # ---------------------------------------------------------------------------
-# Step 3 — Check / auto-install Java 21+
+# Step 3 - Check / auto-install Java 21+
 # ---------------------------------------------------------------------------
 
 function Test-JavaVersion {
@@ -279,7 +279,7 @@ function Confirm-JavaVersion {
     $needsInstall = (-not $javaFound) -or ($javaVersion -ne -1 -and $javaVersion -lt 21)
     if (-not $needsInstall) {
         if ($javaVersion -eq -1) {
-            Write-OK "Java detected (version could not be parsed — verify it is 21+)."
+            Write-OK "Java detected (version could not be parsed - verify it is 21+)."
         } else {
             Write-OK "Java $javaVersion detected."
         }
@@ -305,12 +305,12 @@ function Confirm-JavaVersion {
         }
     } else {
         Start-Process $JavaDownloadPageUrl
-        Write-Warn "Continuing without confirmed Java 21 — install it before launching the instance."
+        Write-Warn "Continuing without confirmed Java 21 - install it before launching the instance."
     }
 }
 
 # ---------------------------------------------------------------------------
-# Step 4 — Download packwiz-installer-bootstrap.jar
+# Step 4 - Download packwiz-installer-bootstrap.jar
 # ---------------------------------------------------------------------------
 
 function Get-PackwizBootstrap {
@@ -332,7 +332,7 @@ function Get-PackwizBootstrap {
 }
 
 # ---------------------------------------------------------------------------
-# Step 5 — Create the Prism Launcher instance
+# Step 5 - Create the Prism Launcher instance
 # ---------------------------------------------------------------------------
 
 function New-PrismInstance {
@@ -404,13 +404,13 @@ name=$PackName
 }
 
 # ---------------------------------------------------------------------------
-# Fallback — manual folder picker (only used if Prism's instances dir can't
+# Fallback - manual folder picker (only used if Prism's instances dir can't
 # be determined, which shouldn't normally happen)
 # ---------------------------------------------------------------------------
 
 function Get-FallbackInstallDirectory {
     Show-MessageBox `
-        -Message "Could not automatically determine Prism Launcher's instances folder.`n`nYou'll be asked to pick a folder instead — copy it into Prism's 'instances' directory yourself afterward." `
+        -Message "Could not automatically determine Prism Launcher's instances folder.`n`nYou'll be asked to pick a folder instead - copy it into Prism's 'instances' directory yourself afterward." `
         -Title "Manual Location Needed" `
         -Icon Warning | Out-Null
 
@@ -443,7 +443,7 @@ function Main {
         Write-Step "Checking for Prism Launcher..."
         $prismExe = Find-PrismLauncher
         if (-not $prismExe) {
-            Write-Warn "Prism Launcher not found — prompting for installation."
+            Write-Warn "Prism Launcher not found - prompting for installation."
             $prismExe = Install-PrismLauncher
         }
         Write-OK "Prism Launcher found: $prismExe"
@@ -480,7 +480,7 @@ function Main {
         Write-Host ""
 
         Show-MessageBox `
-            -Message "Installation complete!`n`nThe instance was created directly inside Prism Launcher's instances folder — no manual copying needed.`n`nNext steps:`n`n1. Open (or restart) Prism Launcher.`n2. Find and select '$PackName'.`n3. Click Launch — packwiz will automatically download all mods on first launch.`n4. Enjoy the server!`n`nInstance location:`n$instanceDir" `
+            -Message "Installation complete!`n`nThe instance was created directly inside Prism Launcher's instances folder - no manual copying needed.`n`nNext steps:`n`n1. Open (or restart) Prism Launcher.`n2. Find and select '$PackName'.`n3. Click Launch - packwiz will automatically download all mods on first launch.`n4. Enjoy the server!`n`nInstance location:`n$instanceDir" `
             -Title "Installation Complete" `
             -Icon Information | Out-Null
 
@@ -497,7 +497,7 @@ function Main {
 }
 
 # Wrapped so the window stays open on any exit path (success, handled error,
-# or an unhandled exception) — otherwise "Run with PowerShell" closes the
+# or an unhandled exception) - otherwise "Run with PowerShell" closes the
 # console the instant the script finishes, before you can read anything.
 try {
     Main
