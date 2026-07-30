@@ -253,16 +253,22 @@ function Install-Java {
     }
 
     Write-Step "Installing Java 21 (a Windows admin prompt (UAC) may appear - approve it)..."
+    $logPath = Join-Path $env:TEMP "temurin21-install.log"
     try {
         # -Verb RunAs requests elevation: the Temurin MSI installs per-machine
         # (Program Files, HKLM), which msiexec refuses without admin rights -
         # that shows up as exit code 1625 (ERROR_INSTALL_REJECTED) otherwise.
-        $proc = Start-Process -FilePath "msiexec.exe" -ArgumentList @("/i", "`"$installerPath`"", "/quiet", "/norestart") -Verb RunAs -PassThru -Wait
+        # /l*v writes a verbose log so a generic exit code (e.g. 1603, "fatal
+        # error during installation") can actually be diagnosed afterward.
+        $proc = Start-Process -FilePath "msiexec.exe" -ArgumentList @("/i", "`"$installerPath`"", "/quiet", "/norestart", "/l*v", "`"$logPath`"") -Verb RunAs -PassThru -Wait
         if ($proc.ExitCode -eq 1625) {
             throw "msiexec exited with code 1625 (installation rejected). This almost always means it ran without administrator rights, or a Group Policy on this machine blocks MSI installs. Try again and approve the UAC prompt, or install manually as an administrator."
         }
+        if ($proc.ExitCode -eq 1603) {
+            throw "msiexec exited with code 1603 (fatal error during installation - a generic code, the real reason is only in the log). Common causes: a pending Windows restart from a previous install/uninstall, or leftover files/registry entries from a prior Java install attempt. Try restarting Windows and running this again. Log saved to: $logPath"
+        }
         if ($proc.ExitCode -ne 0) {
-            throw "msiexec exited with code $($proc.ExitCode)"
+            throw "msiexec exited with code $($proc.ExitCode). Log saved to: $logPath"
         }
         Write-OK "Java 21 installed successfully."
         return $true
