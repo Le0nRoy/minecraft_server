@@ -486,6 +486,8 @@ function Main {
 
     } catch {
         Write-Fail "An unexpected error occurred: $_"
+        Write-Host ""
+        Write-Host $_.ScriptStackTrace -ForegroundColor DarkGray
         Show-MessageBox `
             -Message "Installation failed with the following error:`n`n$_`n`nPlease check the console output for details." `
             -Title "Installation Failed" `
@@ -494,4 +496,13 @@ function Main {
     }
 }
 
-Main
+# Wrapped so the window stays open on any exit path (success, handled error,
+# or an unhandled exception) — otherwise "Run with PowerShell" closes the
+# console the instant the script finishes, before you can read anything.
+try {
+    Main
+} finally {
+    Write-Host ""
+    Write-Host "Press Enter to close this window..." -ForegroundColor Gray
+    Read-Host | Out-Null
+}
