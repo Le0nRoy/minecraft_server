@@ -157,17 +157,17 @@ This is a fallback path, not the normal one — all three scripts should locate 
 
 ### Uninstalling (Windows)
 
-The Windows installer writes `uninstall.bat` and `uninstall.ps1` directly into the instance folder it creates. Double-click `uninstall.bat` inside that folder to remove the modpack:
+The Windows installer writes `uninstall-infra-modpack.bat` and `uninstall-infra-modpack.ps1` into the **instances** folder (one level up from the modpack's own folder — not inside it, deliberately: deleting a directory while a script running from inside it is still open can fail with "in use by another application"). Double-click `uninstall-infra-modpack.bat` there to remove the modpack:
 
 - Asks for confirmation before deleting anything.
 - Separately asks (in Russian, matching the rest of the installer's target audience) whether to also uninstall the Java 21 (Eclipse Temurin) that was installed for this modpack — answer no if Java is used by anything else on the machine.
-- Deletes the whole instance folder (world saves, configs, mods — everything).
+- Deletes the whole `minecraft-infra-pack` instance folder (world saves, configs, mods — everything).
 
-If you installed before this feature existed, grab both files from the repo and save them — with these exact names — inside your existing instance folder:
+If you installed before this feature existed, grab both files from the repo and save them into your Prism instances folder (as siblings of `minecraft-infra-pack`, not inside it):
 ```powershell
-$dir = "$env:APPDATA\PrismLauncher\instances\minecraft-infra-pack"
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Le0nRoy/minecraft_server/neoforge-1.21.1-migration/scripts/uninstall-windows.ps1" -OutFile "$dir\uninstall.ps1"
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Le0nRoy/minecraft_server/neoforge-1.21.1-migration/scripts/uninstall-windows.bat" -OutFile "$dir\uninstall.bat"
+$dir = "$env:APPDATA\PrismLauncher\instances"
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Le0nRoy/minecraft_server/neoforge-1.21.1-migration/scripts/uninstall-infra-modpack.ps1" -OutFile "$dir\uninstall-infra-modpack.ps1"
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Le0nRoy/minecraft_server/neoforge-1.21.1-migration/scripts/uninstall-infra-modpack.bat" -OutFile "$dir\uninstall-infra-modpack.bat"
 ```
 
 ---
