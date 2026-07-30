@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# install-client-linux.sh — Install the Minecraft Infra Pack modpack on Linux via Prism Launcher.
+# install-client-linux.sh - Install the Minecraft Infra Pack modpack on Linux via Prism Launcher.
 #
 # Usage: bash install-client-linux.sh
 #
 # Environment overrides:
-#   PRISM_LAUNCHER_DIR   — Override auto-detection of Prism Launcher data directory
+#   PRISM_LAUNCHER_DIR - Override auto-detection of Prism Launcher data directory
 #
 # The script will:
 #   1. Locate (or offer to install) Prism Launcher
@@ -49,7 +49,7 @@ require_cmd() {
 }
 
 # ---------------------------------------------------------------------------
-# Step 1 — Locate Prism Launcher data directory
+# Step 1 - Locate Prism Launcher data directory
 # ---------------------------------------------------------------------------
 
 find_prism_dir() {
@@ -134,7 +134,7 @@ offer_install_prism() {
 }
 
 # ---------------------------------------------------------------------------
-# Step 2 — Check / auto-install Java 21+
+# Step 2 - Check / auto-install Java 21+
 # ---------------------------------------------------------------------------
 
 get_java_major() {
@@ -200,7 +200,7 @@ check_java() {
         major="$(get_java_major)"
         if [[ -z "${major}" ]]; then
             warn "Could not determine Java version from 'java -version' output."
-            warn "Proceeding anyway — ensure Java 21+ is available."
+            warn "Proceeding anyway - ensure Java 21+ is available."
             return 0
         fi
         if (( major < 21 )); then
@@ -223,12 +223,12 @@ check_java() {
     if [[ -n "${major}" ]] && (( major >= 21 )); then
         success "Java ${major} installed and detected."
     else
-        warn "Java was installed but version could not be confirmed as 21+ in this session — open a new terminal and re-run if the instance fails to launch."
+        warn "Java was installed but version could not be confirmed as 21+ in this session - open a new terminal and re-run if the instance fails to launch."
     fi
 }
 
 # ---------------------------------------------------------------------------
-# Step 3 — Download packwiz-installer-bootstrap.jar
+# Step 3 - Download packwiz-installer-bootstrap.jar
 # ---------------------------------------------------------------------------
 
 download_bootstrap() {
@@ -250,7 +250,7 @@ download_bootstrap() {
 }
 
 # ---------------------------------------------------------------------------
-# Step 4 — Create Prism Launcher instance
+# Step 4 - Create Prism Launcher instance
 # ---------------------------------------------------------------------------
 
 create_instance() {
@@ -318,7 +318,7 @@ EOF
 main() {
     echo ""
     echo "=========================================="
-    echo "  Minecraft Infra Pack — Linux Installer  "
+    echo "  Minecraft Infra Pack - Linux Installer  "
     echo "=========================================="
     echo ""
 
@@ -364,7 +364,7 @@ main() {
     echo "  Next steps:"
     echo "  1. Open Prism Launcher."
     echo "  2. Find the instance named '${PACK_NAME}'."
-    echo "  3. Click Launch — packwiz will automatically download all mods on first run."
+    echo "  3. Click Launch - packwiz will automatically download all mods on first run."
     echo "  4. Enjoy the server!"
     echo ""
     echo "  Note: An internet connection is required on first launch so packwiz"

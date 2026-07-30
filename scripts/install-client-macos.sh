@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# install-client-macos.sh — Install the Minecraft Infra Pack modpack on macOS via Prism Launcher.
+# install-client-macos.sh - Install the Minecraft Infra Pack modpack on macOS via Prism Launcher.
 #
 # Usage: bash install-client-macos.sh
 #
@@ -44,7 +44,7 @@ error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 die()     { error "$*"; exit 1; }
 
 # ---------------------------------------------------------------------------
-# Step 1 — Locate (or offer to install) Prism Launcher
+# Step 1 - Locate (or offer to install) Prism Launcher
 # ---------------------------------------------------------------------------
 
 find_prism_app() {
@@ -87,7 +87,7 @@ offer_install_prism() {
 }
 
 # ---------------------------------------------------------------------------
-# Step 2 — Locate Prism Launcher's real "instances" directory
+# Step 2 - Locate Prism Launcher's real "instances" directory
 # ---------------------------------------------------------------------------
 
 find_prism_data_dir() {
@@ -110,7 +110,7 @@ find_prism_data_dir() {
 }
 
 # ---------------------------------------------------------------------------
-# Step 3 — Check / auto-install Java 21+
+# Step 3 - Check / auto-install Java 21+
 # ---------------------------------------------------------------------------
 
 get_java_major() {
@@ -184,12 +184,12 @@ check_java() {
     if [[ -n "${major}" ]] && (( major >= 21 )); then
         success "Java ${major} installed and detected."
     else
-        warn "Java was installed but version could not be confirmed as 21+ in this session — open a new terminal and re-run if the instance fails to launch."
+        warn "Java was installed but version could not be confirmed as 21+ in this session - open a new terminal and re-run if the instance fails to launch."
     fi
 }
 
 # ---------------------------------------------------------------------------
-# Step 4 — Download packwiz-installer-bootstrap.jar
+# Step 4 - Download packwiz-installer-bootstrap.jar
 # ---------------------------------------------------------------------------
 
 download_bootstrap() {
@@ -209,7 +209,7 @@ download_bootstrap() {
 }
 
 # ---------------------------------------------------------------------------
-# Step 5 — Create Prism Launcher instance
+# Step 5 - Create Prism Launcher instance
 # ---------------------------------------------------------------------------
 
 create_instance() {
@@ -277,7 +277,7 @@ EOF
 main() {
     echo ""
     echo "==========================================="
-    echo "  Minecraft Infra Pack — macOS Installer   "
+    echo "  Minecraft Infra Pack - macOS Installer   "
     echo "==========================================="
     echo ""
 
@@ -327,19 +327,19 @@ main() {
     echo "==========================================="
     echo ""
     echo "  The instance was created directly inside Prism Launcher's instances"
-    echo "  folder — no manual copying needed."
+    echo "  folder - no manual copying needed."
     echo ""
     echo "  Next steps:"
     echo "  1. Open (or restart) Prism Launcher."
     echo "  2. Find and select '${PACK_NAME}'."
-    echo "  3. Click Launch — packwiz will download all mods on first run."
+    echo "  3. Click Launch - packwiz will download all mods on first run."
     echo "  4. Enjoy the server!"
     echo ""
     echo "  Tip: An internet connection is required on first launch."
     echo ""
 
     # Show a native macOS notification
-    osascript -e "display notification \"Instance ready — launch Prism Launcher to play!\" with title \"Minecraft Infra Pack\" subtitle \"Installation complete\"" 2>/dev/null || true
+    osascript -e "display notification \"Instance ready - launch Prism Launcher to play!\" with title \"Minecraft Infra Pack\" subtitle \"Installation complete\"" 2>/dev/null || true
 }
 
 main "$@"
