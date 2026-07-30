@@ -102,16 +102,33 @@ if ($javaEntries.Count -gt 0) {
         -Title "Удалить Java 21?" -Buttons YesNo -Icon Question
 
     if ($javaAnswer -eq [System.Windows.Forms.DialogResult]::Yes) {
+        $allRemoved = $true
         foreach ($entry in $javaEntries) {
             Write-Log "Removing: $($entry.DisplayName) (PSChildName=$($entry.PSChildName))"
             Write-Host "Удаление: $($entry.DisplayName)..." -ForegroundColor Cyan
+            # This is a per-machine MSI install (HKLM, ALLUSERS=1) - removing
+            # it needs the same elevation the installer requests when
+            # installing it (-Verb RunAs), or msiexec silently fails under a
+            # non-admin token and nothing actually gets removed even though
+            # the exit code was never checked here before.
             if ($entry.UninstallString -match "msiexec") {
-                Start-Process -FilePath "msiexec.exe" -ArgumentList @("/x", $entry.PSChildName, "/quiet", "/norestart") -Wait
+                $proc = Start-Process -FilePath "msiexec.exe" -ArgumentList @("/x", $entry.PSChildName, "/quiet", "/norestart") -Verb RunAs -PassThru -Wait
             } else {
-                Start-Process -FilePath "cmd.exe" -ArgumentList @("/c", $entry.UninstallString, "/quiet") -Wait
+                $proc = Start-Process -FilePath "cmd.exe" -ArgumentList @("/c", $entry.UninstallString, "/quiet") -Verb RunAs -PassThru -Wait
+            }
+            Write-Log "Uninstall process exit code: $($proc.ExitCode)"
+            if ($proc.ExitCode -ne 0) {
+                $allRemoved = $false
+                Write-Host "  [FAIL] Код возврата: $($proc.ExitCode)" -ForegroundColor Red
             }
         }
-        Write-Host "Java 21 удалена." -ForegroundColor Green
+        if ($allRemoved) {
+            Write-Log "Java removal: all entries reported exit code 0."
+            Write-Host "Java 21 удалена." -ForegroundColor Green
+        } else {
+            Write-Log "Java removal: at least one entry failed - see exit codes above."
+            Write-Host "Не удалось полностью удалить Java (см. код возврата выше). Возможно, был отклонён запрос на права администратора (UAC)." -ForegroundColor Red
+        }
     } else {
         Write-Log "User chose to keep Java."
         Write-Host "Java оставлена без изменений."
