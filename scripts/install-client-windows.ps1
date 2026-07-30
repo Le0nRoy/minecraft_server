@@ -336,6 +336,30 @@ function Get-PackwizBootstrap {
 # Step 5 - Create the Prism Launcher instance
 # ---------------------------------------------------------------------------
 
+function Write-UninstallScripts {
+    param([string]$TargetInstanceDir)
+
+    # Single-quoted here-strings: no variable interpolation at all, so none
+    # of the $-signs below need escaping. InstanceDir is passed in at
+    # uninstall time as a real -InstanceDir argument, not baked in here.
+    $uninstallPs1B64 = 'cGFyYW0oCiAgICBbUGFyYW1ldGVyKE1hbmRhdG9yeT0kdHJ1ZSldCiAgICBbc3RyaW5nXSRJbnN0YW5jZURpcgopCgpBZGQtVHlwZSAtQXNzZW1ibHlOYW1lIFN5c3RlbS5XaW5kb3dzLkZvcm1zCgpmdW5jdGlvbiBTaG93LU1zZ0JveCB7CiAgICBwYXJhbSgKICAgICAgICBbc3RyaW5nXSRNZXNzYWdlLAogICAgICAgIFtzdHJpbmddJFRpdGxlID0gItCj0LTQsNC70LXQvdC40LUgTWluZWNyYWZ0IEluZnJhIFBhY2siLAogICAgICAgIFtTeXN0ZW0uV2luZG93cy5Gb3Jtcy5NZXNzYWdlQm94QnV0dG9uc10kQnV0dG9ucyA9IFtTeXN0ZW0uV2luZG93cy5Gb3Jtcy5NZXNzYWdlQm94QnV0dG9uc106Ok9LLAogICAgICAgIFtTeXN0ZW0uV2luZG93cy5Gb3Jtcy5NZXNzYWdlQm94SWNvbl0kSWNvbiA9IFtTeXN0ZW0uV2luZG93cy5Gb3Jtcy5NZXNzYWdlQm94SWNvbl06OkluZm9ybWF0aW9uCiAgICApCiAgICByZXR1cm4gW1N5c3RlbS5XaW5kb3dzLkZvcm1zLk1lc3NhZ2VCb3hdOjpTaG93KCRNZXNzYWdlLCAkVGl0bGUsICRCdXR0b25zLCAkSWNvbikKfQoKV3JpdGUtSG9zdCAiIgpXcml0ZS1Ib3N0ICI9PT0g0KPQtNCw0LvQtdC90LjQtSBNaW5lY3JhZnQgSW5mcmEgUGFjayA9PT0iIC1Gb3JlZ3JvdW5kQ29sb3IgQ3lhbgpXcml0ZS1Ib3N0ICIiCgokY29uZmlybSA9IFNob3ctTXNnQm94IGAKICAgIC1NZXNzYWdlICLQo9C00LDQu9C40YLRjCDQvNC+0LTQv9Cw0LogTWluZWNyYWZ0IEluZnJhIFBhY2s/YG5gbtCR0YPQtNC10YIg0YPQtNCw0LvQtdC90LAg0LLRgdGPINC/0LDQv9C60LA6YG4kSW5zdGFuY2VEaXJgbmBuKNCy0LrQu9GO0YfQsNGPINGB0L7RhdGA0LDQvdC10L3QuNGPINC80LjRgNC+0LIsINC60L7QvdGE0LjQs9C4INC4INCy0YHQtSDQvNC+0LTRiykiIGAKICAgIC1UaXRsZSAi0J/QvtC00YLQstC10YDQttC00LXQvdC40LUg0YPQtNCw0LvQtdC90LjRjyIgLUJ1dHRvbnMgWWVzTm8gLUljb24gV2FybmluZwppZiAoJGNvbmZpcm0gLW5lIFtTeXN0ZW0uV2luZG93cy5Gb3Jtcy5EaWFsb2dSZXN1bHRdOjpZZXMpIHsKICAgIFdyaXRlLUhvc3QgItCe0YLQvNC10L3QtdC90L4g0L/QvtC70YzQt9C+0LLQsNGC0LXQu9C10LwuIgogICAgUmVhZC1Ib3N0ICLQndCw0LbQvNC40YLQtSBFbnRlciDQtNC70Y8g0LLRi9GF0L7QtNCwIgogICAgZXhpdCAwCn0KCmZ1bmN0aW9uIEZpbmQtVGVtdXJpblVuaW5zdGFsbGVycyB7CiAgICAkcGF0aHMgPSBAKAogICAgICAgICJIS0xNOlxTT0ZUV0FSRVxNaWNyb3NvZnRcV2luZG93c1xDdXJyZW50VmVyc2lvblxVbmluc3RhbGxcKiIsCiAgICAgICAgIkhLTE06XFNPRlRXQVJFXFdPVzY0MzJOb2RlXE1pY3Jvc29mdFxXaW5kb3dzXEN1cnJlbnRWZXJzaW9uXFVuaW5zdGFsbFwqIgogICAgKQogICAgJGZvdW5kID0gQCgpCiAgICBmb3JlYWNoICgkcCBpbiAkcGF0aHMpIHsKICAgICAgICBHZXQtSXRlbVByb3BlcnR5IC1QYXRoICRwIC1FcnJvckFjdGlvbiBTaWxlbnRseUNvbnRpbnVlIHwgV2hlcmUtT2JqZWN0IHsKICAgICAgICAgICAgJF8uRGlzcGxheU5hbWUgLW1hdGNoICJUZW11cmluIiAtYW5kICRfLkRpc3BsYXlOYW1lIC1tYXRjaCAiMjEiCiAgICAgICAgfSB8IEZvckVhY2gtT2JqZWN0IHsgJGZvdW5kICs9ICRfIH0KICAgIH0KICAgIHJldHVybiAkZm91bmQKfQoKJGphdmFFbnRyaWVzID0gRmluZC1UZW11cmluVW5pbnN0YWxsZXJzCmlmICgkamF2YUVudHJpZXMuQ291bnQgLWd0IDApIHsKICAgICRuYW1lcyA9ICgkamF2YUVudHJpZXMgfCBGb3JFYWNoLU9iamVjdCB7ICRfLkRpc3BsYXlOYW1lIH0pIC1qb2luICJgbiIKICAgICRqYXZhQW5zd2VyID0gU2hvdy1Nc2dCb3ggYAogICAgICAgIC1NZXNzYWdlICLQndCw0LnQtNC10L3QsCBKYXZhIDIxIChFY2xpcHNlIFRlbXVyaW4pLCDRg9GB0YLQsNC90L7QstC70LXQvdC90LDRjyDQstC80LXRgdGC0LUg0YEg0Y3RgtC40Lwg0LzQvtC00L/QsNC60L7QvDpgbmBuJG5hbWVzYG5gbtCj0LTQsNC70LjRgtGMINGC0LDQutC20LUgSmF2YSAyMT9gbmBu0JLRi9Cx0LXRgNC40YLQtSAn0J3QtdGCJywg0LXRgdC70LggSmF2YSDQuNGB0L/QvtC70YzQt9GD0LXRgtGB0Y8g0LTRgNGD0LPQuNC80Lgg0L/RgNC+0LPRgNCw0LzQvNCw0LzQuCDQvdCwINGN0YLQvtC8INC60L7QvNC/0YzRjtGC0LXRgNC1LiIgYAogICAgICAgIC1UaXRsZSAi0KPQtNCw0LvQuNGC0YwgSmF2YSAyMT8iIC1CdXR0b25zIFllc05vIC1JY29uIFF1ZXN0aW9uCgogICAgaWYgKCRqYXZhQW5zd2VyIC1lcSBbU3lzdGVtLldpbmRvd3MuRm9ybXMuRGlhbG9nUmVzdWx0XTo6WWVzKSB7CiAgICAgICAgZm9yZWFjaCAoJGVudHJ5IGluICRqYXZhRW50cmllcykgewogICAgICAgICAgICBXcml0ZS1Ib3N0ICLQo9C00LDQu9C10L3QuNC1OiAkKCRlbnRyeS5EaXNwbGF5TmFtZSkuLi4iIC1Gb3JlZ3JvdW5kQ29sb3IgQ3lhbgogICAgICAgICAgICBpZiAoJGVudHJ5LlVuaW5zdGFsbFN0cmluZyAtbWF0Y2ggIm1zaWV4ZWMiKSB7CiAgICAgICAgICAgICAgICBTdGFydC1Qcm9jZXNzIC1GaWxlUGF0aCAibXNpZXhlYy5leGUiIC1Bcmd1bWVudExpc3QgQCgiL3giLCAkZW50cnkuUFNDaGlsZE5hbWUsICIvcXVpZXQiLCAiL25vcmVzdGFydCIpIC1XYWl0CiAgICAgICAgICAgIH0gZWxzZSB7CiAgICAgICAgICAgICAgICBTdGFydC1Qcm9jZXNzIC1GaWxlUGF0aCAiY21kLmV4ZSIgLUFyZ3VtZW50TGlzdCBAKCIvYyIsICRlbnRyeS5Vbmluc3RhbGxTdHJpbmcsICIvcXVpZXQiKSAtV2FpdAogICAgICAgICAgICB9CiAgICAgICAgfQogICAgICAgIFdyaXRlLUhvc3QgIkphdmEgMjEg0YPQtNCw0LvQtdC90LAuIiAtRm9yZWdyb3VuZENvbG9yIEdyZWVuCiAgICB9IGVsc2UgewogICAgICAgIFdyaXRlLUhvc3QgIkphdmEg0L7RgdGC0LDQstC70LXQvdCwINCx0LXQtyDQuNC30LzQtdC90LXQvdC40LkuIgogICAgfQp9IGVsc2UgewogICAgV3JpdGUtSG9zdCAiSmF2YSAyMSAoVGVtdXJpbiksINGB0LLRj9C30LDQvdC90LDRjyDRgSDRjdGC0LjQvCDRg9GB0YLQsNC90L7QstGJ0LjQutC+0LwsINC90LUg0L3QsNC50LTQtdC90LAgLSDQv9GA0L7Qv9GD0YHQutCw0LXQvC4iCn0KCldyaXRlLUhvc3QgIiIKV3JpdGUtSG9zdCAi0KPQtNCw0LvQtdC90LjQtSDQv9Cw0L/QutC4INC80L7QtNC/0LDQutCwOiAkSW5zdGFuY2VEaXIiIC1Gb3JlZ3JvdW5kQ29sb3IgQ3lhbgpTdGFydC1TbGVlcCAtU2Vjb25kcyAxCnRyeSB7CiAgICBSZW1vdmUtSXRlbSAtTGl0ZXJhbFBhdGggJEluc3RhbmNlRGlyIC1SZWN1cnNlIC1Gb3JjZSAtRXJyb3JBY3Rpb24gU3RvcAogICAgV3JpdGUtSG9zdCAi0JzQvtC00L/QsNC6INGD0YHQv9C10YjQvdC+INGD0LTQsNC70ZHQvS4iIC1Gb3JlZ3JvdW5kQ29sb3IgR3JlZW4KICAgIFNob3ctTXNnQm94IC1NZXNzYWdlICLQnNC+0LTQv9Cw0Log0YPRgdC/0LXRiNC90L4g0YPQtNCw0LvRkdC9LiIgLVRpdGxlICLQk9C+0YLQvtCy0L4iIC1JY29uIEluZm9ybWF0aW9uIHwgT3V0LU51bGwKfSBjYXRjaCB7CiAgICBXcml0ZS1Ib3N0ICLQntGI0LjQsdC60LAg0L/RgNC4INGD0LTQsNC70LXQvdC40Lg6ICRfIiAtRm9yZWdyb3VuZENvbG9yIFJlZAogICAgU2hvdy1Nc2dCb3ggYAogICAgICAgIC1NZXNzYWdlICLQndC1INGD0LTQsNC70L7RgdGMINC/0L7Qu9C90L7RgdGC0YzRjiDRg9C00LDQu9C40YLRjCDQv9Cw0L/QutGDINC80L7QtNC/0LDQutCwOmBuJF9gbmBu0J/QvtC/0YDQvtCx0YPQudGC0LUg0YPQtNCw0LvQuNGC0Ywg0LLRgNGD0YfQvdGD0Y46YG4kSW5zdGFuY2VEaXIiIGAKICAgICAgICAtVGl0bGUgItCe0YjQuNCx0LrQsCIgLUljb24gRXJyb3IgfCBPdXQtTnVsbAp9CgpXcml0ZS1Ib3N0ICIiCldyaXRlLUhvc3QgItCd0LDQttC80LjRgtC1IEVudGVyINC00LvRjyDQstGL0YXQvtC00LAuLi4iIC1Gb3JlZ3JvdW5kQ29sb3IgR3JheQpSZWFkLUhvc3QgfCBPdXQtTnVsbA=='
+    $uninstallPs1 = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($uninstallPs1B64))
+
+    $uninstallBat = @'
+@echo off
+setlocal
+set "INSTANCE_DIR=%~dp0"
+if "%INSTANCE_DIR:~-1%"=="\" set "INSTANCE_DIR=%INSTANCE_DIR:~0,-1%"
+set "TMPPS1=%TEMP%\mip-uninstall-%RANDOM%.ps1"
+copy "%~dp0uninstall.ps1" "%TMPPS1%" >nul
+start "Uninstall Minecraft Infra Pack" powershell -NoExit -ExecutionPolicy Bypass -File "%TMPPS1%" -InstanceDir "%INSTANCE_DIR%"
+exit /b
+'@
+
+    Set-Content -Path (Join-Path $TargetInstanceDir "uninstall.ps1") -Value $uninstallPs1 -Encoding UTF8
+    Set-Content -Path (Join-Path $TargetInstanceDir "uninstall.bat") -Value $uninstallBat -Encoding ASCII
+}
+
 function New-PrismInstance {
     param([string]$BaseDir)
 
@@ -399,6 +423,10 @@ name=$PackName
     Write-Step "Downloading packwiz-installer-bootstrap.jar into instance..."
     $bootstrapDest = Join-Path $minecraftDir "packwiz-installer-bootstrap.jar"
     Get-PackwizBootstrap -DestinationPath $bootstrapDest
+
+    # --- uninstall.ps1 + uninstall.bat ---
+    Write-Step "Writing uninstall scripts..."
+    Write-UninstallScripts -TargetInstanceDir $instanceDir
 
     Write-OK "Instance created at: $instanceDir"
     return $instanceDir
@@ -481,7 +509,7 @@ function Main {
         Write-Host ""
 
         Show-MessageBox `
-            -Message "Installation complete!`n`nThe instance was created directly inside Prism Launcher's instances folder - no manual copying needed.`n`nNext steps:`n`n1. Open (or restart) Prism Launcher.`n2. Find and select '$PackName'.`n3. Click Launch - packwiz will automatically download all mods on first launch.`n4. Enjoy the server!`n`nInstance location:`n$instanceDir" `
+            -Message "Installation complete!`n`nThe instance was created directly inside Prism Launcher's instances folder - no manual copying needed.`n`nNext steps:`n`n1. Open (or restart) Prism Launcher.`n2. Find and select '$PackName'.`n3. Click Launch - packwiz will automatically download all mods on first launch.`n4. Enjoy the server!`n`nInstance location:`n$instanceDir`n`nTo remove the modpack later, run uninstall.bat inside that folder." `
             -Title "Installation Complete" `
             -Icon Information | Out-Null
 

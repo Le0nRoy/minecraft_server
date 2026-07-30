@@ -155,6 +155,21 @@ This is a fallback path, not the normal one — all three scripts should locate 
 4. Restart Prism Launcher (or just refresh) — the instance appears in the list on its own.
 5. Select it and click **Launch**. `.minecraft` will look empty right up until this point — that's normal, packwiz populates `mods/` automatically as part of launching, right before Minecraft itself starts.
 
+### Uninstalling (Windows)
+
+The Windows installer writes `uninstall.bat` and `uninstall.ps1` directly into the instance folder it creates. Double-click `uninstall.bat` inside that folder to remove the modpack:
+
+- Asks for confirmation before deleting anything.
+- Separately asks (in Russian, matching the rest of the installer's target audience) whether to also uninstall the Java 21 (Eclipse Temurin) that was installed for this modpack — answer no if Java is used by anything else on the machine.
+- Deletes the whole instance folder (world saves, configs, mods — everything).
+
+If you installed before this feature existed, grab both files from the repo and save them — with these exact names — inside your existing instance folder:
+```powershell
+$dir = "$env:APPDATA\PrismLauncher\instances\minecraft-infra-pack"
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Le0nRoy/minecraft_server/neoforge-1.21.1-migration/scripts/uninstall-windows.ps1" -OutFile "$dir\uninstall.ps1"
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Le0nRoy/minecraft_server/neoforge-1.21.1-migration/scripts/uninstall-windows.bat" -OutFile "$dir\uninstall.bat"
+```
+
 ---
 
 ## Configuration (.env)
