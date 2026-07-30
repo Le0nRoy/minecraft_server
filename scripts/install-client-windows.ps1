@@ -674,3 +674,11 @@ try {
     Write-Host "Press Enter to close this window..." -ForegroundColor Gray
     Read-Host | Out-Null
 }
+
+# A fresh install can end up spawning a few child/helper processes along the
+# way (the Prism silent installer, the elevated Java MSI) - if any of them
+# leave a handle open back to this process, plain end-of-script wouldn't
+# actually terminate powershell.exe, so the .bat wrapper's window is left
+# open even after Read-Host returns. Force it explicitly instead of relying
+# on natural process exit.
+exit 0
