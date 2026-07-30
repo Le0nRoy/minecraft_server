@@ -106,14 +106,14 @@ All three installer scripts now:
 
 All three installer scripts are self-contained (every URL inside them is absolute), so anyone can run them straight from GitHub without cloning anything.
 
-**Windows** — there's a single file, `install-client-windows.bat`, that's both a valid `.bat` and a valid PowerShell script at the same time (a polyglot). Pick whichever you prefer:
+**Windows** — pick whichever you prefer:
 
-- **Double-click**: download [`install-client-windows.bat`](scripts/install-client-windows.bat) and double-click it. Explorer normally can't run `.ps1` files directly — double-clicking one (or using "Run with PowerShell") skips the `-ExecutionPolicy Bypass` flag, hits the default Restricted execution policy, and the window closes instantly with an error before you can read it. This file sidesteps that: double-clicking runs it as a `.bat`, which re-invokes itself through PowerShell with the right flags and keeps the window open.
 - **One-liner**: open PowerShell and run:
   ```powershell
-  iex (irm https://raw.githubusercontent.com/Le0nRoy/minecraft_server/neoforge-1.21.1-migration/scripts/install-client-windows.bat)
+  iex (irm https://raw.githubusercontent.com/Le0nRoy/minecraft_server/neoforge-1.21.1-migration/scripts/install-client-windows.ps1)
   ```
-  This downloads and runs the script entirely in memory — nothing is saved to disk, so there's no risk of the "access denied" error you'd get trying to save a file into a protected folder like `C:\Windows\System32`. `iex`/`Invoke-Expression` treats the leading batch header as an ordinary PowerShell comment and runs straight past it.
+  This downloads and runs the script entirely in memory — nothing is saved to disk, so there's no risk of the "access denied" error you'd get trying to save a file into a protected folder like `C:\Windows\System32`.
+- **Double-click**: download [`install-client-windows.bat`](scripts/install-client-windows.bat) and double-click it. Explorer normally can't run `.ps1` files directly — double-clicking one (or using "Run with PowerShell") skips the `-ExecutionPolicy Bypass` flag, hits the default Restricted execution policy, and the window closes instantly with an error before you can read it. This `.bat` fetches `install-client-windows.ps1` fresh from GitHub and runs it with the right flags, keeping the window open.
 
 **Linux**
 ```bash
@@ -135,7 +135,7 @@ Detects or installs Prism Launcher (Flatpak, Snap, or native); detects or instal
 
 Windows — double-click `scripts/install-client-windows.bat`, or from a PowerShell prompt:
 ```powershell
-powershell -NoExit -ExecutionPolicy Bypass -File scripts\install-client-windows.bat
+powershell -NoExit -ExecutionPolicy Bypass -File scripts\install-client-windows.ps1
 ```
 Detects or installs Prism Launcher; detects or installs Java 21 (downloads the latest Temurin MSI from Adoptium and runs it silently, with your confirmation first); locates `%APPDATA%\PrismLauncher\instances` (or the portable install's own `instances/` folder, if detected) and creates the instance there directly.
 
@@ -540,6 +540,7 @@ minecraft-infra/
 │   ├── rcon.sh
 │   ├── install-client-linux.sh
 │   ├── install-client-macos.sh
+│   ├── install-client-windows.ps1
 │   └── install-client-windows.bat
 ├── systemd/            # Systemd unit files and install/uninstall scripts
 │   ├── minecraft.service
