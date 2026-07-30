@@ -1,7 +1,9 @@
-﻿param(
+param(
     [Parameter(Mandatory=$true)]
     [string]$InstanceDir
 )
+
+$ScriptVersion = "2026-07-31-v2"
 
 Add-Type -AssemblyName System.Windows.Forms
 
@@ -15,24 +17,47 @@ function Show-MsgBox {
     return [System.Windows.Forms.MessageBox]::Show($Message, $Title, $Buttons, $Icon)
 }
 
+# Log file lives next to this script (the instances folder), so it survives
+# the self-cleanup at the end and the user can send it back for diagnosis.
+# Named with the script version + a timestamp so runs from different copies
+# of this file (and different attempts) can't be confused with each other.
+$instancesDirForLog = Split-Path -Parent $InstanceDir
+$logTimestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+$LogPath = Join-Path $instancesDirForLog "uninstall-log-$ScriptVersion-$logTimestamp.txt"
+
+function Write-Log {
+    param([string]$Message)
+    $line = "[$(Get-Date -Format 'HH:mm:ss')] $Message"
+    Add-Content -Path $LogPath -Value $line -Encoding UTF8
+}
+
+function Write-DiagLine {
+    param([string]$Message)
+    Write-Host "  [diag] $Message" -ForegroundColor DarkGray
+    Write-Log "[diag-uninstall] $Message"
+}
+
+"=== uninstall-infra-modpack.ps1 $ScriptVersion started $logTimestamp ===" | Out-File -FilePath $LogPath -Encoding UTF8
+Write-Log "InstanceDir=$InstanceDir"
+$isAdmin = (New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
+Write-Log "[env] User=$env:USERNAME Is64BitProcess=$([Environment]::Is64BitProcess) IsAdmin=$isAdmin PSVersion=$($PSVersionTable.PSVersion) PSEdition=$($PSVersionTable.PSEdition)"
+
 Write-Host ""
 Write-Host "=== Удаление Minecraft Infra Pack ===" -ForegroundColor Cyan
+Write-Host "    (версия скрипта: $ScriptVersion, лог: $LogPath)" -ForegroundColor DarkGray
 Write-Host ""
 
 $confirm = Show-MsgBox `
     -Message "Удалить модпак Minecraft Infra Pack?`n`nБудет удалена вся папка:`n$InstanceDir`n`n(включая сохранения миров, конфиги и все моды)" `
     -Title "Подтверждение удаления" -Buttons YesNo -Icon Warning
 if ($confirm -ne [System.Windows.Forms.DialogResult]::Yes) {
+    Write-Log "User cancelled at confirmation dialog."
     Write-Host "Отменено пользователем."
     Read-Host "Нажмите Enter для выхода"
     exit 0
 }
 
 function Find-TemurinUninstallers {
-    # Two "не найдена" reports in a row despite the registry key being
-    # confirmed present by hand mean the static logic isn't the whole
-    # story - dump per-path scan counts so the next run gives hard facts
-    # instead of another guess.
     $paths = @(
         "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
         "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
@@ -42,18 +67,19 @@ function Find-TemurinUninstallers {
     foreach ($p in $paths) {
         $err = $null
         $entries = @(Get-ItemProperty -Path $p -ErrorAction SilentlyContinue -ErrorVariable err)
-        Write-Host "  [diag] $p -> $($entries.Count) subkeys read" -ForegroundColor DarkGray
+        Write-DiagLine "$p -> $($entries.Count) subkeys read"
         if ($err) {
-            Write-Host "  [diag] Get-ItemProperty error: $($err[0])" -ForegroundColor DarkGray
+            Write-DiagLine "Get-ItemProperty error: $($err[0])"
         }
         $withName = @($entries | Where-Object { $_.PSObject.Properties.Name -contains "DisplayName" -and $_.DisplayName })
-        Write-Host "  [diag] $p -> $($withName.Count) subkeys have a non-empty DisplayName" -ForegroundColor DarkGray
+        Write-DiagLine "$p -> $($withName.Count) subkeys have a non-empty DisplayName"
         $matches = @($withName | Where-Object { $_.DisplayName -match "Temurin" -and $_.DisplayName -match "21" })
         if ($matches.Count -gt 0) {
-            Write-Host "  [diag] matched: $(($matches | ForEach-Object { $_.DisplayName }) -join '; ')" -ForegroundColor DarkGray
+            Write-DiagLine "matched: $(($matches | ForEach-Object { $_.DisplayName }) -join '; ')"
         }
         foreach ($m in $matches) { $found += $m }
     }
+    Write-Log "Find-TemurinUninstallers returning $($found.Count) entries total"
     return $found
 }
 
@@ -66,6 +92,7 @@ if ($javaEntries.Count -gt 0) {
 
     if ($javaAnswer -eq [System.Windows.Forms.DialogResult]::Yes) {
         foreach ($entry in $javaEntries) {
+            Write-Log "Removing: $($entry.DisplayName) (PSChildName=$($entry.PSChildName))"
             Write-Host "Удаление: $($entry.DisplayName)..." -ForegroundColor Cyan
             if ($entry.UninstallString -match "msiexec") {
                 Start-Process -FilePath "msiexec.exe" -ArgumentList @("/x", $entry.PSChildName, "/quiet", "/norestart") -Wait
@@ -75,9 +102,11 @@ if ($javaEntries.Count -gt 0) {
         }
         Write-Host "Java 21 удалена." -ForegroundColor Green
     } else {
+        Write-Log "User chose to keep Java."
         Write-Host "Java оставлена без изменений."
     }
 } else {
+    Write-Log "No Java entries found - skipping Java removal."
     Write-Host "Java 21 (Temurin), связанная с этим установщиком, не найдена - пропускаем."
 }
 
@@ -86,18 +115,21 @@ Write-Host "Удаление папки модпака: $InstanceDir" -Foregroun
 Start-Sleep -Seconds 1
 try {
     Remove-Item -LiteralPath $InstanceDir -Recurse -Force -ErrorAction Stop
+    Write-Log "Modpack folder removed successfully."
     Write-Host "Модпак успешно удалён." -ForegroundColor Green
 
-    # Self-cleanup: remove the uninstaller files themselves too. Safe at this
-    # point -- this script is running from a temp copy (see the .bat that
-    # launched it), so the originals in the instances folder aren't open by
-    # anything and can be deleted like any other file.
+    # Self-cleanup: remove the uninstaller files themselves too (but not the
+    # log - that's left behind on purpose so it can be sent back). Safe at
+    # this point -- this script is running from a temp copy (see the .bat
+    # that launched it), so the originals in the instances folder aren't
+    # open by anything and can be deleted like any other file.
     $instancesDir = Split-Path -Parent $InstanceDir
     Remove-Item -LiteralPath (Join-Path $instancesDir "uninstall-infra-modpack.bat") -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath (Join-Path $instancesDir "uninstall-infra-modpack.ps1") -Force -ErrorAction SilentlyContinue
 
     Show-MsgBox -Message "Модпак успешно удалён." -Title "Готово" -Icon Information | Out-Null
 } catch {
+    Write-Log "ERROR removing modpack folder: $_"
     Write-Host "Ошибка при удалении: $_" -ForegroundColor Red
     Show-MsgBox `
         -Message "Не удалось полностью удалить папку модпака:`n$_`n`nПопробуйте удалить вручную:`n$InstanceDir" `
@@ -105,5 +137,6 @@ try {
 }
 
 Write-Host ""
+Write-Host "Лог сохранён в: $LogPath" -ForegroundColor DarkGray
 Write-Host "Нажмите Enter для выхода..." -ForegroundColor Gray
 Read-Host | Out-Null

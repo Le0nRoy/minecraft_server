@@ -39,6 +39,7 @@ $PrismDownloadUrl    = "https://prismlauncher.org/download/windows"
 $PrismDirectUrl      = "https://github.com/PrismLauncher/PrismLauncher/releases/latest/download/PrismLauncher-Windows-Setup.exe"
 $AdoptiumApiUrl      = "https://api.adoptium.net/v3/assets/feature_releases/21/ga?image_type=jdk&os=windows&architecture=x64&vendor=eclipse&page_size=1"
 $JavaDownloadPageUrl = "https://adoptium.net/temurin/releases/?version=21"
+$ScriptVersion       = "2026-07-31-v2"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -75,6 +76,36 @@ function Write-Warn {
 function Write-Fail {
     param([string]$Message)
     Write-Host "[FAIL] $Message" -ForegroundColor Red
+}
+
+# Log file lives in Prism's instances folder (same place the uninstaller's
+# own log ends up), named with the script version + a timestamp so runs
+# from different copies/attempts of this file can't be confused with each
+# other. Initialize-Log is called once the instances directory is known;
+# until then Write-Log is a no-op so early calls don't error out.
+$LogPath = $null
+
+function Initialize-Log {
+    param([string]$Directory)
+    $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    $script:LogPath = Join-Path $Directory "install-log-$ScriptVersion-$timestamp.txt"
+    "=== install-client-windows.ps1 $ScriptVersion started $timestamp ===" | Out-File -FilePath $script:LogPath -Encoding UTF8
+    $isAdmin = (New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
+    Write-Log "[env] User=$env:USERNAME Is64BitProcess=$([Environment]::Is64BitProcess) IsAdmin=$isAdmin PSVersion=$($PSVersionTable.PSVersion) PSEdition=$($PSVersionTable.PSEdition)"
+}
+
+function Write-Log {
+    param([string]$Message)
+    if ($script:LogPath) {
+        $line = "[$(Get-Date -Format 'HH:mm:ss')] $Message"
+        Add-Content -Path $script:LogPath -Value $line -Encoding UTF8
+    }
+}
+
+function Write-DiagLine {
+    param([string]$Message)
+    Write-Host "  [diag] $Message" -ForegroundColor DarkGray
+    Write-Log "[diag-install] $Message"
 }
 
 # ---------------------------------------------------------------------------
@@ -228,34 +259,35 @@ function Find-RegisteredJava21 {
         "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
         "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"
     )
+    $matchedEntry = $null
     foreach ($path in $uninstallPaths) {
-        $entries = Get-ItemProperty -Path $path -ErrorAction SilentlyContinue
-        foreach ($entry in $entries) {
-            # Not every uninstall subkey has a DisplayName value at all (some
-            # are just leftover component registrations) - under
-            # Set-StrictMode -Version Latest, reading a property that isn't
-            # present on the object throws instead of returning $null, so
-            # check for its existence first.
-            if ($entry.PSObject.Properties.Name -notcontains "DisplayName") {
-                continue
-            }
-            $displayName = $entry.DisplayName
-            if ($displayName -and $displayName -match "Temurin" -and $displayName -match "21") {
-                $installLocation = $null
-                if ($entry.PSObject.Properties.Name -contains "InstallLocation") {
-                    $installLocation = $entry.InstallLocation
-                }
-                # A plain `return` here only exits this foreach iteration if
-                # written inside ForEach-Object - using a real foreach loop
-                # instead so this actually returns from the function.
-                return [PSCustomObject]@{
-                    DisplayName     = $displayName
-                    InstallLocation = $installLocation
+        $entries = @(Get-ItemProperty -Path $path -ErrorAction SilentlyContinue)
+        Write-DiagLine "$path -> $($entries.Count) subkeys read"
+        $withName = @($entries | Where-Object { $_.PSObject.Properties.Name -contains "DisplayName" -and $_.DisplayName })
+        Write-DiagLine "$path -> $($withName.Count) subkeys have a non-empty DisplayName"
+
+        if (-not $matchedEntry) {
+            foreach ($entry in $withName) {
+                $displayName = $entry.DisplayName
+                if ($displayName -match "Temurin" -and $displayName -match "21") {
+                    Write-DiagLine "matched: $displayName"
+                    $installLocation = $null
+                    if ($entry.PSObject.Properties.Name -contains "InstallLocation") {
+                        $installLocation = $entry.InstallLocation
+                    }
+                    $matchedEntry = [PSCustomObject]@{
+                        DisplayName     = $displayName
+                        InstallLocation = $installLocation
+                    }
+                    break
                 }
             }
         }
     }
-    return $null
+    if (-not $matchedEntry) {
+        Write-DiagLine "no match found across all paths"
+    }
+    return $matchedEntry
 }
 
 function Update-CurrentProcessPath {
@@ -347,6 +379,7 @@ function Install-Java {
 function Confirm-JavaVersion {
     Write-Step "Checking Java version..."
     $javaFound, $javaVersion = Test-JavaVersion
+    Write-Log "Test-JavaVersion: found=$javaFound version=$javaVersion"
 
     $needsInstall = (-not $javaFound) -or ($javaVersion -ne -1 -and $javaVersion -lt 21)
 
@@ -438,7 +471,7 @@ function Write-UninstallScripts {
     # Single-quoted here-string: no variable interpolation at all, so none
     # of the $-signs below need escaping. InstanceDir is passed in at
     # uninstall time as a real -InstanceDir argument, not baked in here.
-    $uninstallPs1B64 = 'cGFyYW0oCiAgICBbUGFyYW1ldGVyKE1hbmRhdG9yeT0kdHJ1ZSldCiAgICBbc3RyaW5nXSRJbnN0YW5jZURpcgopCgpBZGQtVHlwZSAtQXNzZW1ibHlOYW1lIFN5c3RlbS5XaW5kb3dzLkZvcm1zCgpmdW5jdGlvbiBTaG93LU1zZ0JveCB7CiAgICBwYXJhbSgKICAgICAgICBbc3RyaW5nXSRNZXNzYWdlLAogICAgICAgIFtzdHJpbmddJFRpdGxlID0gItCj0LTQsNC70LXQvdC40LUgTWluZWNyYWZ0IEluZnJhIFBhY2siLAogICAgICAgIFtTeXN0ZW0uV2luZG93cy5Gb3Jtcy5NZXNzYWdlQm94QnV0dG9uc10kQnV0dG9ucyA9IFtTeXN0ZW0uV2luZG93cy5Gb3Jtcy5NZXNzYWdlQm94QnV0dG9uc106Ok9LLAogICAgICAgIFtTeXN0ZW0uV2luZG93cy5Gb3Jtcy5NZXNzYWdlQm94SWNvbl0kSWNvbiA9IFtTeXN0ZW0uV2luZG93cy5Gb3Jtcy5NZXNzYWdlQm94SWNvbl06OkluZm9ybWF0aW9uCiAgICApCiAgICByZXR1cm4gW1N5c3RlbS5XaW5kb3dzLkZvcm1zLk1lc3NhZ2VCb3hdOjpTaG93KCRNZXNzYWdlLCAkVGl0bGUsICRCdXR0b25zLCAkSWNvbikKfQoKV3JpdGUtSG9zdCAiIgpXcml0ZS1Ib3N0ICI9PT0g0KPQtNCw0LvQtdC90LjQtSBNaW5lY3JhZnQgSW5mcmEgUGFjayA9PT0iIC1Gb3JlZ3JvdW5kQ29sb3IgQ3lhbgpXcml0ZS1Ib3N0ICIiCgokY29uZmlybSA9IFNob3ctTXNnQm94IGAKICAgIC1NZXNzYWdlICLQo9C00LDQu9C40YLRjCDQvNC+0LTQv9Cw0LogTWluZWNyYWZ0IEluZnJhIFBhY2s/YG5gbtCR0YPQtNC10YIg0YPQtNCw0LvQtdC90LAg0LLRgdGPINC/0LDQv9C60LA6YG4kSW5zdGFuY2VEaXJgbmBuKNCy0LrQu9GO0YfQsNGPINGB0L7RhdGA0LDQvdC10L3QuNGPINC80LjRgNC+0LIsINC60L7QvdGE0LjQs9C4INC4INCy0YHQtSDQvNC+0LTRiykiIGAKICAgIC1UaXRsZSAi0J/QvtC00YLQstC10YDQttC00LXQvdC40LUg0YPQtNCw0LvQtdC90LjRjyIgLUJ1dHRvbnMgWWVzTm8gLUljb24gV2FybmluZwppZiAoJGNvbmZpcm0gLW5lIFtTeXN0ZW0uV2luZG93cy5Gb3Jtcy5EaWFsb2dSZXN1bHRdOjpZZXMpIHsKICAgIFdyaXRlLUhvc3QgItCe0YLQvNC10L3QtdC90L4g0L/QvtC70YzQt9C+0LLQsNGC0LXQu9C10LwuIgogICAgUmVhZC1Ib3N0ICLQndCw0LbQvNC40YLQtSBFbnRlciDQtNC70Y8g0LLRi9GF0L7QtNCwIgogICAgZXhpdCAwCn0KCmZ1bmN0aW9uIEZpbmQtVGVtdXJpblVuaW5zdGFsbGVycyB7CiAgICAjIFR3byAi0L3QtSDQvdCw0LnQtNC10L3QsCIgcmVwb3J0cyBpbiBhIHJvdyBkZXNwaXRlIHRoZSByZWdpc3RyeSBrZXkgYmVpbmcKICAgICMgY29uZmlybWVkIHByZXNlbnQgYnkgaGFuZCBtZWFuIHRoZSBzdGF0aWMgbG9naWMgaXNuJ3QgdGhlIHdob2xlCiAgICAjIHN0b3J5IC0gZHVtcCBwZXItcGF0aCBzY2FuIGNvdW50cyBzbyB0aGUgbmV4dCBydW4gZ2l2ZXMgaGFyZCBmYWN0cwogICAgIyBpbnN0ZWFkIG9mIGFub3RoZXIgZ3Vlc3MuCiAgICAkcGF0aHMgPSBAKAogICAgICAgICJIS0xNOlxTT0ZUV0FSRVxNaWNyb3NvZnRcV2luZG93c1xDdXJyZW50VmVyc2lvblxVbmluc3RhbGxcKiIsCiAgICAgICAgIkhLTE06XFNPRlRXQVJFXFdPVzY0MzJOb2RlXE1pY3Jvc29mdFxXaW5kb3dzXEN1cnJlbnRWZXJzaW9uXFVuaW5zdGFsbFwqIiwKICAgICAgICAiSEtDVTpcU09GVFdBUkVcTWljcm9zb2Z0XFdpbmRvd3NcQ3VycmVudFZlcnNpb25cVW5pbnN0YWxsXCoiCiAgICApCiAgICAkZm91bmQgPSBAKCkKICAgIGZvcmVhY2ggKCRwIGluICRwYXRocykgewogICAgICAgICRlcnIgPSAkbnVsbAogICAgICAgICRlbnRyaWVzID0gQChHZXQtSXRlbVByb3BlcnR5IC1QYXRoICRwIC1FcnJvckFjdGlvbiBTaWxlbnRseUNvbnRpbnVlIC1FcnJvclZhcmlhYmxlIGVycikKICAgICAgICBXcml0ZS1Ib3N0ICIgIFtkaWFnXSAkcCAtPiAkKCRlbnRyaWVzLkNvdW50KSBzdWJrZXlzIHJlYWQiIC1Gb3JlZ3JvdW5kQ29sb3IgRGFya0dyYXkKICAgICAgICBpZiAoJGVycikgewogICAgICAgICAgICBXcml0ZS1Ib3N0ICIgIFtkaWFnXSBHZXQtSXRlbVByb3BlcnR5IGVycm9yOiAkKCRlcnJbMF0pIiAtRm9yZWdyb3VuZENvbG9yIERhcmtHcmF5CiAgICAgICAgfQogICAgICAgICR3aXRoTmFtZSA9IEAoJGVudHJpZXMgfCBXaGVyZS1PYmplY3QgeyAkXy5QU09iamVjdC5Qcm9wZXJ0aWVzLk5hbWUgLWNvbnRhaW5zICJEaXNwbGF5TmFtZSIgLWFuZCAkXy5EaXNwbGF5TmFtZSB9KQogICAgICAgIFdyaXRlLUhvc3QgIiAgW2RpYWddICRwIC0+ICQoJHdpdGhOYW1lLkNvdW50KSBzdWJrZXlzIGhhdmUgYSBub24tZW1wdHkgRGlzcGxheU5hbWUiIC1Gb3JlZ3JvdW5kQ29sb3IgRGFya0dyYXkKICAgICAgICAkbWF0Y2hlcyA9IEAoJHdpdGhOYW1lIHwgV2hlcmUtT2JqZWN0IHsgJF8uRGlzcGxheU5hbWUgLW1hdGNoICJUZW11cmluIiAtYW5kICRfLkRpc3BsYXlOYW1lIC1tYXRjaCAiMjEiIH0pCiAgICAgICAgaWYgKCRtYXRjaGVzLkNvdW50IC1ndCAwKSB7CiAgICAgICAgICAgIFdyaXRlLUhvc3QgIiAgW2RpYWddIG1hdGNoZWQ6ICQoKCRtYXRjaGVzIHwgRm9yRWFjaC1PYmplY3QgeyAkXy5EaXNwbGF5TmFtZSB9KSAtam9pbiAnOyAnKSIgLUZvcmVncm91bmRDb2xvciBEYXJrR3JheQogICAgICAgIH0KICAgICAgICBmb3JlYWNoICgkbSBpbiAkbWF0Y2hlcykgeyAkZm91bmQgKz0gJG0gfQogICAgfQogICAgcmV0dXJuICRmb3VuZAp9CgokamF2YUVudHJpZXMgPSBGaW5kLVRlbXVyaW5Vbmluc3RhbGxlcnMKaWYgKCRqYXZhRW50cmllcy5Db3VudCAtZ3QgMCkgewogICAgJG5hbWVzID0gKCRqYXZhRW50cmllcyB8IEZvckVhY2gtT2JqZWN0IHsgJF8uRGlzcGxheU5hbWUgfSkgLWpvaW4gImBuIgogICAgJGphdmFBbnN3ZXIgPSBTaG93LU1zZ0JveCBgCiAgICAgICAgLU1lc3NhZ2UgItCd0LDQudC00LXQvdCwIEphdmEgMjEgKEVjbGlwc2UgVGVtdXJpbiksINGD0YHRgtCw0L3QvtCy0LvQtdC90L3QsNGPINCy0LzQtdGB0YLQtSDRgSDRjdGC0LjQvCDQvNC+0LTQv9Cw0LrQvtC8OmBuYG4kbmFtZXNgbmBu0KPQtNCw0LvQuNGC0Ywg0YLQsNC60LbQtSBKYXZhIDIxP2BuYG7QktGL0LHQtdGA0LjRgtC1ICfQndC10YInLCDQtdGB0LvQuCBKYXZhINC40YHQv9C+0LvRjNC30YPQtdGC0YHRjyDQtNGA0YPQs9C40LzQuCDQv9GA0L7Qs9GA0LDQvNC80LDQvNC4INC90LAg0Y3RgtC+0Lwg0LrQvtC80L/RjNGO0YLQtdGA0LUuIiBgCiAgICAgICAgLVRpdGxlICLQo9C00LDQu9C40YLRjCBKYXZhIDIxPyIgLUJ1dHRvbnMgWWVzTm8gLUljb24gUXVlc3Rpb24KCiAgICBpZiAoJGphdmFBbnN3ZXIgLWVxIFtTeXN0ZW0uV2luZG93cy5Gb3Jtcy5EaWFsb2dSZXN1bHRdOjpZZXMpIHsKICAgICAgICBmb3JlYWNoICgkZW50cnkgaW4gJGphdmFFbnRyaWVzKSB7CiAgICAgICAgICAgIFdyaXRlLUhvc3QgItCj0LTQsNC70LXQvdC40LU6ICQoJGVudHJ5LkRpc3BsYXlOYW1lKS4uLiIgLUZvcmVncm91bmRDb2xvciBDeWFuCiAgICAgICAgICAgIGlmICgkZW50cnkuVW5pbnN0YWxsU3RyaW5nIC1tYXRjaCAibXNpZXhlYyIpIHsKICAgICAgICAgICAgICAgIFN0YXJ0LVByb2Nlc3MgLUZpbGVQYXRoICJtc2lleGVjLmV4ZSIgLUFyZ3VtZW50TGlzdCBAKCIveCIsICRlbnRyeS5QU0NoaWxkTmFtZSwgIi9xdWlldCIsICIvbm9yZXN0YXJ0IikgLVdhaXQKICAgICAgICAgICAgfSBlbHNlIHsKICAgICAgICAgICAgICAgIFN0YXJ0LVByb2Nlc3MgLUZpbGVQYXRoICJjbWQuZXhlIiAtQXJndW1lbnRMaXN0IEAoIi9jIiwgJGVudHJ5LlVuaW5zdGFsbFN0cmluZywgIi9xdWlldCIpIC1XYWl0CiAgICAgICAgICAgIH0KICAgICAgICB9CiAgICAgICAgV3JpdGUtSG9zdCAiSmF2YSAyMSDRg9C00LDQu9C10L3QsC4iIC1Gb3JlZ3JvdW5kQ29sb3IgR3JlZW4KICAgIH0gZWxzZSB7CiAgICAgICAgV3JpdGUtSG9zdCAiSmF2YSDQvtGB0YLQsNCy0LvQtdC90LAg0LHQtdC3INC40LfQvNC10L3QtdC90LjQuS4iCiAgICB9Cn0gZWxzZSB7CiAgICBXcml0ZS1Ib3N0ICJKYXZhIDIxIChUZW11cmluKSwg0YHQstGP0LfQsNC90L3QsNGPINGBINGN0YLQuNC8INGD0YHRgtCw0L3QvtCy0YnQuNC60L7QvCwg0L3QtSDQvdCw0LnQtNC10L3QsCAtINC/0YDQvtC/0YPRgdC60LDQtdC8LiIKfQoKV3JpdGUtSG9zdCAiIgpXcml0ZS1Ib3N0ICLQo9C00LDQu9C10L3QuNC1INC/0LDQv9C60Lgg0LzQvtC00L/QsNC60LA6ICRJbnN0YW5jZURpciIgLUZvcmVncm91bmRDb2xvciBDeWFuClN0YXJ0LVNsZWVwIC1TZWNvbmRzIDEKdHJ5IHsKICAgIFJlbW92ZS1JdGVtIC1MaXRlcmFsUGF0aCAkSW5zdGFuY2VEaXIgLVJlY3Vyc2UgLUZvcmNlIC1FcnJvckFjdGlvbiBTdG9wCiAgICBXcml0ZS1Ib3N0ICLQnNC+0LTQv9Cw0Log0YPRgdC/0LXRiNC90L4g0YPQtNCw0LvRkdC9LiIgLUZvcmVncm91bmRDb2xvciBHcmVlbgoKICAgICMgU2VsZi1jbGVhbnVwOiByZW1vdmUgdGhlIHVuaW5zdGFsbGVyIGZpbGVzIHRoZW1zZWx2ZXMgdG9vLiBTYWZlIGF0IHRoaXMKICAgICMgcG9pbnQgLS0gdGhpcyBzY3JpcHQgaXMgcnVubmluZyBmcm9tIGEgdGVtcCBjb3B5IChzZWUgdGhlIC5iYXQgdGhhdAogICAgIyBsYXVuY2hlZCBpdCksIHNvIHRoZSBvcmlnaW5hbHMgaW4gdGhlIGluc3RhbmNlcyBmb2xkZXIgYXJlbid0IG9wZW4gYnkKICAgICMgYW55dGhpbmcgYW5kIGNhbiBiZSBkZWxldGVkIGxpa2UgYW55IG90aGVyIGZpbGUuCiAgICAkaW5zdGFuY2VzRGlyID0gU3BsaXQtUGF0aCAtUGFyZW50ICRJbnN0YW5jZURpcgogICAgUmVtb3ZlLUl0ZW0gLUxpdGVyYWxQYXRoIChKb2luLVBhdGggJGluc3RhbmNlc0RpciAidW5pbnN0YWxsLWluZnJhLW1vZHBhY2suYmF0IikgLUZvcmNlIC1FcnJvckFjdGlvbiBTaWxlbnRseUNvbnRpbnVlCiAgICBSZW1vdmUtSXRlbSAtTGl0ZXJhbFBhdGggKEpvaW4tUGF0aCAkaW5zdGFuY2VzRGlyICJ1bmluc3RhbGwtaW5mcmEtbW9kcGFjay5wczEiKSAtRm9yY2UgLUVycm9yQWN0aW9uIFNpbGVudGx5Q29udGludWUKCiAgICBTaG93LU1zZ0JveCAtTWVzc2FnZSAi0JzQvtC00L/QsNC6INGD0YHQv9C10YjQvdC+INGD0LTQsNC70ZHQvS4iIC1UaXRsZSAi0JPQvtGC0L7QstC+IiAtSWNvbiBJbmZvcm1hdGlvbiB8IE91dC1OdWxsCn0gY2F0Y2ggewogICAgV3JpdGUtSG9zdCAi0J7RiNC40LHQutCwINC/0YDQuCDRg9C00LDQu9C10L3QuNC4OiAkXyIgLUZvcmVncm91bmRDb2xvciBSZWQKICAgIFNob3ctTXNnQm94IGAKICAgICAgICAtTWVzc2FnZSAi0J3QtSDRg9C00LDQu9C+0YHRjCDQv9C+0LvQvdC+0YHRgtGM0Y4g0YPQtNCw0LvQuNGC0Ywg0L/QsNC/0LrRgyDQvNC+0LTQv9Cw0LrQsDpgbiRfYG5gbtCf0L7Qv9GA0L7QsdGD0LnRgtC1INGD0LTQsNC70LjRgtGMINCy0YDRg9GH0L3Rg9GOOmBuJEluc3RhbmNlRGlyIiBgCiAgICAgICAgLVRpdGxlICLQntGI0LjQsdC60LAiIC1JY29uIEVycm9yIHwgT3V0LU51bGwKfQoKV3JpdGUtSG9zdCAiIgpXcml0ZS1Ib3N0ICLQndCw0LbQvNC40YLQtSBFbnRlciDQtNC70Y8g0LLRi9GF0L7QtNCwLi4uIiAtRm9yZWdyb3VuZENvbG9yIEdyYXkKUmVhZC1Ib3N0IHwgT3V0LU51bGw='
+    $uninstallPs1B64 = 'cGFyYW0oCiAgICBbUGFyYW1ldGVyKE1hbmRhdG9yeT0kdHJ1ZSldCiAgICBbc3RyaW5nXSRJbnN0YW5jZURpcgopCgokU2NyaXB0VmVyc2lvbiA9ICIyMDI2LTA3LTMxLXYyIgoKQWRkLVR5cGUgLUFzc2VtYmx5TmFtZSBTeXN0ZW0uV2luZG93cy5Gb3JtcwoKZnVuY3Rpb24gU2hvdy1Nc2dCb3ggewogICAgcGFyYW0oCiAgICAgICAgW3N0cmluZ10kTWVzc2FnZSwKICAgICAgICBbc3RyaW5nXSRUaXRsZSA9ICLQo9C00LDQu9C10L3QuNC1IE1pbmVjcmFmdCBJbmZyYSBQYWNrIiwKICAgICAgICBbU3lzdGVtLldpbmRvd3MuRm9ybXMuTWVzc2FnZUJveEJ1dHRvbnNdJEJ1dHRvbnMgPSBbU3lzdGVtLldpbmRvd3MuRm9ybXMuTWVzc2FnZUJveEJ1dHRvbnNdOjpPSywKICAgICAgICBbU3lzdGVtLldpbmRvd3MuRm9ybXMuTWVzc2FnZUJveEljb25dJEljb24gPSBbU3lzdGVtLldpbmRvd3MuRm9ybXMuTWVzc2FnZUJveEljb25dOjpJbmZvcm1hdGlvbgogICAgKQogICAgcmV0dXJuIFtTeXN0ZW0uV2luZG93cy5Gb3Jtcy5NZXNzYWdlQm94XTo6U2hvdygkTWVzc2FnZSwgJFRpdGxlLCAkQnV0dG9ucywgJEljb24pCn0KCiMgTG9nIGZpbGUgbGl2ZXMgbmV4dCB0byB0aGlzIHNjcmlwdCAodGhlIGluc3RhbmNlcyBmb2xkZXIpLCBzbyBpdCBzdXJ2aXZlcwojIHRoZSBzZWxmLWNsZWFudXAgYXQgdGhlIGVuZCBhbmQgdGhlIHVzZXIgY2FuIHNlbmQgaXQgYmFjayBmb3IgZGlhZ25vc2lzLgojIE5hbWVkIHdpdGggdGhlIHNjcmlwdCB2ZXJzaW9uICsgYSB0aW1lc3RhbXAgc28gcnVucyBmcm9tIGRpZmZlcmVudCBjb3BpZXMKIyBvZiB0aGlzIGZpbGUgKGFuZCBkaWZmZXJlbnQgYXR0ZW1wdHMpIGNhbid0IGJlIGNvbmZ1c2VkIHdpdGggZWFjaCBvdGhlci4KJGluc3RhbmNlc0RpckZvckxvZyA9IFNwbGl0LVBhdGggLVBhcmVudCAkSW5zdGFuY2VEaXIKJGxvZ1RpbWVzdGFtcCA9IEdldC1EYXRlIC1Gb3JtYXQgInl5eXlNTWRkLUhIbW1zcyIKJExvZ1BhdGggPSBKb2luLVBhdGggJGluc3RhbmNlc0RpckZvckxvZyAidW5pbnN0YWxsLWxvZy0kU2NyaXB0VmVyc2lvbi0kbG9nVGltZXN0YW1wLnR4dCIKCmZ1bmN0aW9uIFdyaXRlLUxvZyB7CiAgICBwYXJhbShbc3RyaW5nXSRNZXNzYWdlKQogICAgJGxpbmUgPSAiWyQoR2V0LURhdGUgLUZvcm1hdCAnSEg6bW06c3MnKV0gJE1lc3NhZ2UiCiAgICBBZGQtQ29udGVudCAtUGF0aCAkTG9nUGF0aCAtVmFsdWUgJGxpbmUgLUVuY29kaW5nIFVURjgKfQoKZnVuY3Rpb24gV3JpdGUtRGlhZ0xpbmUgewogICAgcGFyYW0oW3N0cmluZ10kTWVzc2FnZSkKICAgIFdyaXRlLUhvc3QgIiAgW2RpYWddICRNZXNzYWdlIiAtRm9yZWdyb3VuZENvbG9yIERhcmtHcmF5CiAgICBXcml0ZS1Mb2cgIltkaWFnLXVuaW5zdGFsbF0gJE1lc3NhZ2UiCn0KCiI9PT0gdW5pbnN0YWxsLWluZnJhLW1vZHBhY2sucHMxICRTY3JpcHRWZXJzaW9uIHN0YXJ0ZWQgJGxvZ1RpbWVzdGFtcCA9PT0iIHwgT3V0LUZpbGUgLUZpbGVQYXRoICRMb2dQYXRoIC1FbmNvZGluZyBVVEY4CldyaXRlLUxvZyAiSW5zdGFuY2VEaXI9JEluc3RhbmNlRGlyIgokaXNBZG1pbiA9IChOZXctT2JqZWN0IFNlY3VyaXR5LlByaW5jaXBhbC5XaW5kb3dzUHJpbmNpcGFsKFtTZWN1cml0eS5QcmluY2lwYWwuV2luZG93c0lkZW50aXR5XTo6R2V0Q3VycmVudCgpKSkuSXNJblJvbGUoW1NlY3VyaXR5LlByaW5jaXBhbC5XaW5kb3dzQnVpbHRpblJvbGVdOjpBZG1pbmlzdHJhdG9yKQpXcml0ZS1Mb2cgIltlbnZdIFVzZXI9JGVudjpVU0VSTkFNRSBJczY0Qml0UHJvY2Vzcz0kKFtFbnZpcm9ubWVudF06OklzNjRCaXRQcm9jZXNzKSBJc0FkbWluPSRpc0FkbWluIFBTVmVyc2lvbj0kKCRQU1ZlcnNpb25UYWJsZS5QU1ZlcnNpb24pIFBTRWRpdGlvbj0kKCRQU1ZlcnNpb25UYWJsZS5QU0VkaXRpb24pIgoKV3JpdGUtSG9zdCAiIgpXcml0ZS1Ib3N0ICI9PT0g0KPQtNCw0LvQtdC90LjQtSBNaW5lY3JhZnQgSW5mcmEgUGFjayA9PT0iIC1Gb3JlZ3JvdW5kQ29sb3IgQ3lhbgpXcml0ZS1Ib3N0ICIgICAgKNCy0LXRgNGB0LjRjyDRgdC60YDQuNC/0YLQsDogJFNjcmlwdFZlcnNpb24sINC70L7QszogJExvZ1BhdGgpIiAtRm9yZWdyb3VuZENvbG9yIERhcmtHcmF5CldyaXRlLUhvc3QgIiIKCiRjb25maXJtID0gU2hvdy1Nc2dCb3ggYAogICAgLU1lc3NhZ2UgItCj0LTQsNC70LjRgtGMINC80L7QtNC/0LDQuiBNaW5lY3JhZnQgSW5mcmEgUGFjaz9gbmBu0JHRg9C00LXRgiDRg9C00LDQu9C10L3QsCDQstGB0Y8g0L/QsNC/0LrQsDpgbiRJbnN0YW5jZURpcmBuYG4o0LLQutC70Y7Rh9Cw0Y8g0YHQvtGF0YDQsNC90LXQvdC40Y8g0LzQuNGA0L7Qsiwg0LrQvtC90YTQuNCz0Lgg0Lgg0LLRgdC1INC80L7QtNGLKSIgYAogICAgLVRpdGxlICLQn9C+0LTRgtCy0LXRgNC20LTQtdC90LjQtSDRg9C00LDQu9C10L3QuNGPIiAtQnV0dG9ucyBZZXNObyAtSWNvbiBXYXJuaW5nCmlmICgkY29uZmlybSAtbmUgW1N5c3RlbS5XaW5kb3dzLkZvcm1zLkRpYWxvZ1Jlc3VsdF06OlllcykgewogICAgV3JpdGUtTG9nICJVc2VyIGNhbmNlbGxlZCBhdCBjb25maXJtYXRpb24gZGlhbG9nLiIKICAgIFdyaXRlLUhvc3QgItCe0YLQvNC10L3QtdC90L4g0L/QvtC70YzQt9C+0LLQsNGC0LXQu9C10LwuIgogICAgUmVhZC1Ib3N0ICLQndCw0LbQvNC40YLQtSBFbnRlciDQtNC70Y8g0LLRi9GF0L7QtNCwIgogICAgZXhpdCAwCn0KCmZ1bmN0aW9uIEZpbmQtVGVtdXJpblVuaW5zdGFsbGVycyB7CiAgICAkcGF0aHMgPSBAKAogICAgICAgICJIS0xNOlxTT0ZUV0FSRVxNaWNyb3NvZnRcV2luZG93c1xDdXJyZW50VmVyc2lvblxVbmluc3RhbGxcKiIsCiAgICAgICAgIkhLTE06XFNPRlRXQVJFXFdPVzY0MzJOb2RlXE1pY3Jvc29mdFxXaW5kb3dzXEN1cnJlbnRWZXJzaW9uXFVuaW5zdGFsbFwqIiwKICAgICAgICAiSEtDVTpcU09GVFdBUkVcTWljcm9zb2Z0XFdpbmRvd3NcQ3VycmVudFZlcnNpb25cVW5pbnN0YWxsXCoiCiAgICApCiAgICAkZm91bmQgPSBAKCkKICAgIGZvcmVhY2ggKCRwIGluICRwYXRocykgewogICAgICAgICRlcnIgPSAkbnVsbAogICAgICAgICRlbnRyaWVzID0gQChHZXQtSXRlbVByb3BlcnR5IC1QYXRoICRwIC1FcnJvckFjdGlvbiBTaWxlbnRseUNvbnRpbnVlIC1FcnJvclZhcmlhYmxlIGVycikKICAgICAgICBXcml0ZS1EaWFnTGluZSAiJHAgLT4gJCgkZW50cmllcy5Db3VudCkgc3Via2V5cyByZWFkIgogICAgICAgIGlmICgkZXJyKSB7CiAgICAgICAgICAgIFdyaXRlLURpYWdMaW5lICJHZXQtSXRlbVByb3BlcnR5IGVycm9yOiAkKCRlcnJbMF0pIgogICAgICAgIH0KICAgICAgICAkd2l0aE5hbWUgPSBAKCRlbnRyaWVzIHwgV2hlcmUtT2JqZWN0IHsgJF8uUFNPYmplY3QuUHJvcGVydGllcy5OYW1lIC1jb250YWlucyAiRGlzcGxheU5hbWUiIC1hbmQgJF8uRGlzcGxheU5hbWUgfSkKICAgICAgICBXcml0ZS1EaWFnTGluZSAiJHAgLT4gJCgkd2l0aE5hbWUuQ291bnQpIHN1YmtleXMgaGF2ZSBhIG5vbi1lbXB0eSBEaXNwbGF5TmFtZSIKICAgICAgICAkbWF0Y2hlcyA9IEAoJHdpdGhOYW1lIHwgV2hlcmUtT2JqZWN0IHsgJF8uRGlzcGxheU5hbWUgLW1hdGNoICJUZW11cmluIiAtYW5kICRfLkRpc3BsYXlOYW1lIC1tYXRjaCAiMjEiIH0pCiAgICAgICAgaWYgKCRtYXRjaGVzLkNvdW50IC1ndCAwKSB7CiAgICAgICAgICAgIFdyaXRlLURpYWdMaW5lICJtYXRjaGVkOiAkKCgkbWF0Y2hlcyB8IEZvckVhY2gtT2JqZWN0IHsgJF8uRGlzcGxheU5hbWUgfSkgLWpvaW4gJzsgJykiCiAgICAgICAgfQogICAgICAgIGZvcmVhY2ggKCRtIGluICRtYXRjaGVzKSB7ICRmb3VuZCArPSAkbSB9CiAgICB9CiAgICBXcml0ZS1Mb2cgIkZpbmQtVGVtdXJpblVuaW5zdGFsbGVycyByZXR1cm5pbmcgJCgkZm91bmQuQ291bnQpIGVudHJpZXMgdG90YWwiCiAgICByZXR1cm4gJGZvdW5kCn0KCiRqYXZhRW50cmllcyA9IEZpbmQtVGVtdXJpblVuaW5zdGFsbGVycwppZiAoJGphdmFFbnRyaWVzLkNvdW50IC1ndCAwKSB7CiAgICAkbmFtZXMgPSAoJGphdmFFbnRyaWVzIHwgRm9yRWFjaC1PYmplY3QgeyAkXy5EaXNwbGF5TmFtZSB9KSAtam9pbiAiYG4iCiAgICAkamF2YUFuc3dlciA9IFNob3ctTXNnQm94IGAKICAgICAgICAtTWVzc2FnZSAi0J3QsNC50LTQtdC90LAgSmF2YSAyMSAoRWNsaXBzZSBUZW11cmluKSwg0YPRgdGC0LDQvdC+0LLQu9C10L3QvdCw0Y8g0LLQvNC10YHRgtC1INGBINGN0YLQuNC8INC80L7QtNC/0LDQutC+0Lw6YG5gbiRuYW1lc2BuYG7Qo9C00LDQu9C40YLRjCDRgtCw0LrQttC1IEphdmEgMjE/YG5gbtCS0YvQsdC10YDQuNGC0LUgJ9Cd0LXRgicsINC10YHQu9C4IEphdmEg0LjRgdC/0L7Qu9GM0LfRg9C10YLRgdGPINC00YDRg9Cz0LjQvNC4INC/0YDQvtCz0YDQsNC80LzQsNC80Lgg0L3QsCDRjdGC0L7QvCDQutC+0LzQv9GM0Y7RgtC10YDQtS4iIGAKICAgICAgICAtVGl0bGUgItCj0LTQsNC70LjRgtGMIEphdmEgMjE/IiAtQnV0dG9ucyBZZXNObyAtSWNvbiBRdWVzdGlvbgoKICAgIGlmICgkamF2YUFuc3dlciAtZXEgW1N5c3RlbS5XaW5kb3dzLkZvcm1zLkRpYWxvZ1Jlc3VsdF06OlllcykgewogICAgICAgIGZvcmVhY2ggKCRlbnRyeSBpbiAkamF2YUVudHJpZXMpIHsKICAgICAgICAgICAgV3JpdGUtTG9nICJSZW1vdmluZzogJCgkZW50cnkuRGlzcGxheU5hbWUpIChQU0NoaWxkTmFtZT0kKCRlbnRyeS5QU0NoaWxkTmFtZSkpIgogICAgICAgICAgICBXcml0ZS1Ib3N0ICLQo9C00LDQu9C10L3QuNC1OiAkKCRlbnRyeS5EaXNwbGF5TmFtZSkuLi4iIC1Gb3JlZ3JvdW5kQ29sb3IgQ3lhbgogICAgICAgICAgICBpZiAoJGVudHJ5LlVuaW5zdGFsbFN0cmluZyAtbWF0Y2ggIm1zaWV4ZWMiKSB7CiAgICAgICAgICAgICAgICBTdGFydC1Qcm9jZXNzIC1GaWxlUGF0aCAibXNpZXhlYy5leGUiIC1Bcmd1bWVudExpc3QgQCgiL3giLCAkZW50cnkuUFNDaGlsZE5hbWUsICIvcXVpZXQiLCAiL25vcmVzdGFydCIpIC1XYWl0CiAgICAgICAgICAgIH0gZWxzZSB7CiAgICAgICAgICAgICAgICBTdGFydC1Qcm9jZXNzIC1GaWxlUGF0aCAiY21kLmV4ZSIgLUFyZ3VtZW50TGlzdCBAKCIvYyIsICRlbnRyeS5Vbmluc3RhbGxTdHJpbmcsICIvcXVpZXQiKSAtV2FpdAogICAgICAgICAgICB9CiAgICAgICAgfQogICAgICAgIFdyaXRlLUhvc3QgIkphdmEgMjEg0YPQtNCw0LvQtdC90LAuIiAtRm9yZWdyb3VuZENvbG9yIEdyZWVuCiAgICB9IGVsc2UgewogICAgICAgIFdyaXRlLUxvZyAiVXNlciBjaG9zZSB0byBrZWVwIEphdmEuIgogICAgICAgIFdyaXRlLUhvc3QgIkphdmEg0L7RgdGC0LDQstC70LXQvdCwINCx0LXQtyDQuNC30LzQtdC90LXQvdC40LkuIgogICAgfQp9IGVsc2UgewogICAgV3JpdGUtTG9nICJObyBKYXZhIGVudHJpZXMgZm91bmQgLSBza2lwcGluZyBKYXZhIHJlbW92YWwuIgogICAgV3JpdGUtSG9zdCAiSmF2YSAyMSAoVGVtdXJpbiksINGB0LLRj9C30LDQvdC90LDRjyDRgSDRjdGC0LjQvCDRg9GB0YLQsNC90L7QstGJ0LjQutC+0LwsINC90LUg0L3QsNC50LTQtdC90LAgLSDQv9GA0L7Qv9GD0YHQutCw0LXQvC4iCn0KCldyaXRlLUhvc3QgIiIKV3JpdGUtSG9zdCAi0KPQtNCw0LvQtdC90LjQtSDQv9Cw0L/QutC4INC80L7QtNC/0LDQutCwOiAkSW5zdGFuY2VEaXIiIC1Gb3JlZ3JvdW5kQ29sb3IgQ3lhbgpTdGFydC1TbGVlcCAtU2Vjb25kcyAxCnRyeSB7CiAgICBSZW1vdmUtSXRlbSAtTGl0ZXJhbFBhdGggJEluc3RhbmNlRGlyIC1SZWN1cnNlIC1Gb3JjZSAtRXJyb3JBY3Rpb24gU3RvcAogICAgV3JpdGUtTG9nICJNb2RwYWNrIGZvbGRlciByZW1vdmVkIHN1Y2Nlc3NmdWxseS4iCiAgICBXcml0ZS1Ib3N0ICLQnNC+0LTQv9Cw0Log0YPRgdC/0LXRiNC90L4g0YPQtNCw0LvRkdC9LiIgLUZvcmVncm91bmRDb2xvciBHcmVlbgoKICAgICMgU2VsZi1jbGVhbnVwOiByZW1vdmUgdGhlIHVuaW5zdGFsbGVyIGZpbGVzIHRoZW1zZWx2ZXMgdG9vIChidXQgbm90IHRoZQogICAgIyBsb2cgLSB0aGF0J3MgbGVmdCBiZWhpbmQgb24gcHVycG9zZSBzbyBpdCBjYW4gYmUgc2VudCBiYWNrKS4gU2FmZSBhdAogICAgIyB0aGlzIHBvaW50IC0tIHRoaXMgc2NyaXB0IGlzIHJ1bm5pbmcgZnJvbSBhIHRlbXAgY29weSAoc2VlIHRoZSAuYmF0CiAgICAjIHRoYXQgbGF1bmNoZWQgaXQpLCBzbyB0aGUgb3JpZ2luYWxzIGluIHRoZSBpbnN0YW5jZXMgZm9sZGVyIGFyZW4ndAogICAgIyBvcGVuIGJ5IGFueXRoaW5nIGFuZCBjYW4gYmUgZGVsZXRlZCBsaWtlIGFueSBvdGhlciBmaWxlLgogICAgJGluc3RhbmNlc0RpciA9IFNwbGl0LVBhdGggLVBhcmVudCAkSW5zdGFuY2VEaXIKICAgIFJlbW92ZS1JdGVtIC1MaXRlcmFsUGF0aCAoSm9pbi1QYXRoICRpbnN0YW5jZXNEaXIgInVuaW5zdGFsbC1pbmZyYS1tb2RwYWNrLmJhdCIpIC1Gb3JjZSAtRXJyb3JBY3Rpb24gU2lsZW50bHlDb250aW51ZQogICAgUmVtb3ZlLUl0ZW0gLUxpdGVyYWxQYXRoIChKb2luLVBhdGggJGluc3RhbmNlc0RpciAidW5pbnN0YWxsLWluZnJhLW1vZHBhY2sucHMxIikgLUZvcmNlIC1FcnJvckFjdGlvbiBTaWxlbnRseUNvbnRpbnVlCgogICAgU2hvdy1Nc2dCb3ggLU1lc3NhZ2UgItCc0L7QtNC/0LDQuiDRg9GB0L/QtdGI0L3QviDRg9C00LDQu9GR0L0uIiAtVGl0bGUgItCT0L7RgtC+0LLQviIgLUljb24gSW5mb3JtYXRpb24gfCBPdXQtTnVsbAp9IGNhdGNoIHsKICAgIFdyaXRlLUxvZyAiRVJST1IgcmVtb3ZpbmcgbW9kcGFjayBmb2xkZXI6ICRfIgogICAgV3JpdGUtSG9zdCAi0J7RiNC40LHQutCwINC/0YDQuCDRg9C00LDQu9C10L3QuNC4OiAkXyIgLUZvcmVncm91bmRDb2xvciBSZWQKICAgIFNob3ctTXNnQm94IGAKICAgICAgICAtTWVzc2FnZSAi0J3QtSDRg9C00LDQu9C+0YHRjCDQv9C+0LvQvdC+0YHRgtGM0Y4g0YPQtNCw0LvQuNGC0Ywg0L/QsNC/0LrRgyDQvNC+0LTQv9Cw0LrQsDpgbiRfYG5gbtCf0L7Qv9GA0L7QsdGD0LnRgtC1INGD0LTQsNC70LjRgtGMINCy0YDRg9GH0L3Rg9GOOmBuJEluc3RhbmNlRGlyIiBgCiAgICAgICAgLVRpdGxlICLQntGI0LjQsdC60LAiIC1JY29uIEVycm9yIHwgT3V0LU51bGwKfQoKV3JpdGUtSG9zdCAiIgpXcml0ZS1Ib3N0ICLQm9C+0LMg0YHQvtGF0YDQsNC90ZHQvSDQsjogJExvZ1BhdGgiIC1Gb3JlZ3JvdW5kQ29sb3IgRGFya0dyYXkKV3JpdGUtSG9zdCAi0J3QsNC20LzQuNGC0LUgRW50ZXIg0LTQu9GPINCy0YvRhdC+0LTQsC4uLiIgLUZvcmVncm91bmRDb2xvciBHcmF5ClJlYWQtSG9zdCB8IE91dC1OdWxsCg=='
     $uninstallPs1 = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($uninstallPs1B64))
 
     # Double-quoted here-string: this one needs $InstanceDirName interpolated
@@ -590,6 +623,9 @@ function Main {
             }
         }
         Write-OK "Instances directory: $instancesDir"
+
+        Initialize-Log -Directory $instancesDir
+        Write-OK "Script version: $ScriptVersion (log: $LogPath)"
 
         # 3. Java check / auto-install
         Confirm-JavaVersion
