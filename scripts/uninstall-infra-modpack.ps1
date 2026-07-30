@@ -73,6 +73,15 @@ Start-Sleep -Seconds 1
 try {
     Remove-Item -LiteralPath $InstanceDir -Recurse -Force -ErrorAction Stop
     Write-Host "Модпак успешно удалён." -ForegroundColor Green
+
+    # Self-cleanup: remove the uninstaller files themselves too. Safe at this
+    # point -- this script is running from a temp copy (see the .bat that
+    # launched it), so the originals in the instances folder aren't open by
+    # anything and can be deleted like any other file.
+    $instancesDir = Split-Path -Parent $InstanceDir
+    Remove-Item -LiteralPath (Join-Path $instancesDir "uninstall-infra-modpack.bat") -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath (Join-Path $instancesDir "uninstall-infra-modpack.ps1") -Force -ErrorAction SilentlyContinue
+
     Show-MsgBox -Message "Модпак успешно удалён." -Title "Готово" -Icon Information | Out-Null
 } catch {
     Write-Host "Ошибка при удалении: $_" -ForegroundColor Red
