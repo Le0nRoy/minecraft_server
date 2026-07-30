@@ -252,18 +252,28 @@ function Install-Java {
         return $false
     }
 
-    Write-Step "Installing Java 21 silently (this can take a minute)..."
+    Write-Step "Installing Java 21 (a Windows admin prompt (UAC) may appear - approve it)..."
     try {
-        $proc = Start-Process -FilePath "msiexec.exe" -ArgumentList @("/i", "`"$installerPath`"", "/quiet", "/norestart") -PassThru -Wait
+        # -Verb RunAs requests elevation: the Temurin MSI installs per-machine
+        # (Program Files, HKLM), which msiexec refuses without admin rights -
+        # that shows up as exit code 1625 (ERROR_INSTALL_REJECTED) otherwise.
+        $proc = Start-Process -FilePath "msiexec.exe" -ArgumentList @("/i", "`"$installerPath`"", "/quiet", "/norestart") -Verb RunAs -PassThru -Wait
+        if ($proc.ExitCode -eq 1625) {
+            throw "msiexec exited with code 1625 (installation rejected). This almost always means it ran without administrator rights, or a Group Policy on this machine blocks MSI installs. Try again and approve the UAC prompt, or install manually as an administrator."
+        }
         if ($proc.ExitCode -ne 0) {
             throw "msiexec exited with code $($proc.ExitCode)"
         }
         Write-OK "Java 21 installed successfully."
         return $true
     } catch {
-        Write-Warn "Java installation failed: $_"
+        $errorText = "$_"
+        if ($errorText -match "cancel") {
+            $errorText = "The administrator prompt (UAC) was declined, so Java could not be installed."
+        }
+        Write-Warn "Java installation failed: $errorText"
         Show-MessageBox `
-            -Message "Java installation failed:`n$_`n`nPlease install it manually from:`n$JavaDownloadPageUrl" `
+            -Message "Java installation failed:`n$errorText`n`nPlease install it manually from:`n$JavaDownloadPageUrl" `
             -Title "Installation Failed" `
             -Icon Error
         Start-Process $JavaDownloadPageUrl
