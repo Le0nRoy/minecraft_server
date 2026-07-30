@@ -524,10 +524,6 @@ name=$PackName
     $bootstrapDest = Join-Path $minecraftDir "packwiz-installer-bootstrap.jar"
     Get-PackwizBootstrap -DestinationPath $bootstrapDest
 
-    # --- uninstall.ps1 + uninstall.bat ---
-    Write-Step "Writing uninstall scripts..."
-    Write-UninstallScripts -TargetInstancesDir $BaseDir
-
     Write-OK "Instance created at: $instanceDir"
     return $instanceDir
 }
@@ -597,6 +593,13 @@ function Main {
 
         # 3. Java check / auto-install
         Confirm-JavaVersion
+
+        # Always refresh the uninstaller pair, even if the user keeps their
+        # existing instance below (New-PrismInstance can exit early in that
+        # case). Otherwise a stale copy from an older version of this script
+        # sits in the instances folder indefinitely and never self-heals.
+        Write-Step "Refreshing uninstall scripts..."
+        Write-UninstallScripts -TargetInstancesDir $instancesDir
 
         # 4. Create instance directly inside Prism's instances directory
         $instanceDir = New-PrismInstance -BaseDir $instancesDir
