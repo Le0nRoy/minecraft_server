@@ -252,7 +252,7 @@ This runs `packwiz/scripts/update-mods.sh`, which calls `packwiz update --all` a
 
 ### Mod list
 
-42 mods total. Generated from `packwiz/mods/*.pw.toml` — regenerate this table from there if it drifts, don't hand-edit it back out of sync.
+40 mods total. Generated from `packwiz/mods/*.pw.toml` — regenerate this table from there if it drifts, don't hand-edit it back out of sync.
 
 | Mod Name | Side | Purpose | Source | ID |
 |----------|------|---------|--------|-----|
@@ -285,13 +285,11 @@ This runs `packwiz/scripts/update-mods.sh`, which calls `packwiz update --all` a
 | Mouse Tweaks | both | Improved mouse interactions in inventory | Modrinth | `aC3cM3Vq` |
 | Multi Piston | both | Piston extension library (MineColonies dep) | CurseForge | `303278` |
 | Pipez | both | Item, fluid, and energy pipes | Modrinth | `iRmWy6ga` |
-| Reese's Sodium Options | client | Extra Sodium video options (Sodium Options API dep) | Modrinth | `Bh37bMuy` |
 | Resourceful Lib | both | Shared library (Chipped dep) | Modrinth | `G1hIVOrD` |
 | Roughly Enough Items (REI) | both | In-game item/recipe browser | Modrinth | `nfn13YXA` |
 | Sodium | client | High-performance rendering engine | Modrinth | `AANobbMI` |
 | Sodium Dynamic Lights | client | Dynamic light sources from held/dropped items | Modrinth | `PxQSWIcD` |
 | Sodium Extra | client | Additional Sodium video options and QoL | Modrinth | `PtjYWJkn` |
-| Sodium Options API | client | Options screen API (Sodium Dynamic Lights dep) | Modrinth | `Es5v4eyq` |
 | Structurize | both | Structure placement library (MineColonies dep) | CurseForge | `298744` |
 | Supplementaries | both | Functional decorative blocks | Modrinth | `fFEIiSDQ` |
 | Terralith | both | World-gen overhaul with new biomes | Modrinth | `8oi3bsk5` |
