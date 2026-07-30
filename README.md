@@ -1,9 +1,9 @@
-# minecraft-infra — Modded Fabric Server Infrastructure
+# minecraft-infra — Modded NeoForge Server Infrastructure
 
-A fully automated, Docker-based Minecraft server infrastructure for a modded Fabric 1.20.1 pack. Includes server orchestration, automated backups, client installation helpers, health monitoring, and Telegram notifications — all wired together through a single Makefile.
+A fully automated, Docker-based Minecraft server infrastructure for a modded NeoForge 1.21.1 pack. Includes server orchestration, automated backups, client installation helpers, health monitoring, and Telegram notifications — all wired together through a single Makefile.
 
-![Minecraft 1.20.1](https://img.shields.io/badge/Minecraft-1.20.1-brightgreen)
-![Fabric 0.15.11](https://img.shields.io/badge/Fabric-0.15.11-blue)
+![Minecraft 1.21.1](https://img.shields.io/badge/Minecraft-1.21.1-brightgreen)
+![NeoForge 21.1.244](https://img.shields.io/badge/NeoForge-21.1.244-blue)
 ![Docker](https://img.shields.io/badge/Docker-Compose%20v2-2496ED)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 
@@ -17,7 +17,7 @@ A fully automated, Docker-based Minecraft server infrastructure for a modded Fab
 │                                                                 │
 │  systemd (minecraft.service)                                    │
 │    └── docker compose  (server/docker-compose.yml)             │
-│          ├── minecraft  (itzg/minecraft-server, Fabric 1.20.1) │
+│          ├── minecraft  (itzg/minecraft-server, NeoForge 1.21.1)│
 │          │     ├── :25565  game port (exposed to players)       │
 │          │     └── RCON :25575  (internal only)                 │
 │          ├── healthcheck-sidecar  :8080                         │
@@ -46,7 +46,7 @@ A fully automated, Docker-based Minecraft server infrastructure for a modded Fab
 
 | Component | Image / source | Purpose |
 |-----------|---------------|---------|
-| `minecraft` | `itzg/minecraft-server` | Runs the Fabric server |
+| `minecraft` | `itzg/minecraft-server` | Runs the NeoForge server |
 | `healthcheck-sidecar` | `healthcheck/` | HTTP `/health` endpoint backed by RCON |
 | `telegram-bot` | `telegram-bot/` | Proactive alerts + bot commands |
 | `backup.sh` | `scripts/` | World backup with RCON save-pause |
@@ -64,7 +64,7 @@ A fully automated, Docker-based Minecraft server infrastructure for a modded Fab
 
 ### Clients (players)
 - [Prism Launcher](https://prismlauncher.org) (any platform)
-- Java 17 or newer
+- Java 21 or newer
 
 ---
 
@@ -95,37 +95,57 @@ The server will be reachable at `<host-ip>:25565`.
 
 ## Quick Start — Client
 
-### Linux
+The pack targets **NeoForge 1.21.1** and needs **Java 21+** on the client (not 17 — NeoForge 21.1.x requires 21). Prism Launcher is required; the installer scripts below will offer to install it if missing.
 
+### Don't have the repo cloned? You don't need it.
+
+All three installer scripts are self-contained (every URL inside them is absolute), so anyone can run them straight from GitHub without cloning anything.
+
+**Windows** — open PowerShell and run:
+```powershell
+iex (irm https://raw.githubusercontent.com/Le0nRoy/minecraft_server/neoforge-1.21.1-migration/scripts/install-client-windows.ps1)
+```
+This downloads and runs the script entirely in memory — nothing is saved to disk, so there's no risk of the "access denied" error you'd get trying to save a file into a protected folder like `C:\Windows\System32`.
+
+**Linux**
+```bash
+curl -fsSL https://raw.githubusercontent.com/Le0nRoy/minecraft_server/neoforge-1.21.1-migration/scripts/install-client-linux.sh | bash
+```
+
+**macOS**
+```bash
+curl -fsSL https://raw.githubusercontent.com/Le0nRoy/minecraft_server/neoforge-1.21.1-migration/scripts/install-client-macos.sh | bash
+```
+
+### If you do have the repo
+
+Linux:
 ```bash
 bash scripts/install-client-linux.sh
 ```
+The script detects or installs Prism Launcher (Flatpak, Snap, or native), verifies Java 21+, and creates a pre-configured NeoForge 1.21.1 instance. On first launch packwiz automatically downloads all mods.
 
-The script detects or installs Prism Launcher (Flatpak, Snap, or native), verifies Java 17+, and creates a pre-configured Fabric 1.20.1 instance. On first launch packwiz automatically downloads all mods.
-
-### Windows
-
-Right-click `scripts/install-client-windows.ps1` and choose **Run with PowerShell**.  
-If execution policy blocks it, run:
-
+Windows — right-click `scripts/install-client-windows.ps1` and choose **Run with PowerShell**, or:
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\install-client-windows.ps1
 ```
+A folder-picker dialog asks where to install the instance. Prism Launcher is detected or downloaded automatically. Java 21 is verified; a link to Adoptium Temurin is offered if it is missing.
 
-A folder-picker dialog asks where to install the instance. Prism Launcher is detected or downloaded automatically. Java 17 is verified; a link to Adoptium Temurin is offered if it is missing.
-
-### macOS
-
+macOS:
 ```bash
 bash scripts/install-client-macos.sh
 ```
+The script opens a native macOS folder picker (via `osascript`), verifies Prism Launcher in `~/Applications` or `/Applications`, checks Java 21 via `/usr/libexec/java_home`, and creates the instance. A macOS notification confirms completion.
 
-The script opens a native macOS folder picker (via `osascript`), verifies Prism Launcher in `~/Applications` or `/Applications`, checks Java 17 via `/usr/libexec/java_home`, and creates the instance. A macOS notification confirms completion.
+### Loading the created instance into Prism Launcher
 
-After any platform install:
+The script writes a plain instance folder (`instance.cfg` + `mmc-pack.json` + `.minecraft/`), not a zip — **don't** use "Add Instance → Import from zip or folder" for it, that dialog expects a zip archive and will just show you an empty result. Instead:
+
 1. Open Prism Launcher.
-2. Find the instance named **Minecraft Infra Pack 1.20.1**.
-3. Click **Launch** — packwiz fetches all mod JARs on first run.
+2. In the main window, open the folder view for your instances — click the **Instances** icon on the top toolbar, then **View Instance Folder** (localized builds: **"Экземпляры"** → **"Папки"**). This opens the real instances directory in your file browser.
+3. Copy the whole folder the script created (e.g. `minecraft-infra-pack`) into that instances directory.
+4. Restart Prism Launcher (or just refresh) — the instance appears in the list on its own.
+5. Select it and click **Launch**. `.minecraft` will look empty right up until this point — that's normal, packwiz populates `mods/` automatically as part of launching, right before Minecraft itself starts.
 
 ---
 
@@ -135,9 +155,8 @@ Copy `.env.example` to `.env` (`make setup`) and edit the values below.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MINECRAFT_VERSION` | `1.20.1` | Minecraft release version |
-| `FABRIC_LOADER_VERSION` | `0.15.11` | Fabric loader version |
-| `FABRIC_INSTALLER_VERSION` | `1.0.1` | Fabric installer version |
+| `MINECRAFT_VERSION` | `1.21.1` | Minecraft release version |
+| `NEOFORGE_VERSION` | `21.1.244` | NeoForge loader version |
 | `SERVER_MEMORY_MIN` | `2G` | JVM minimum heap (`-Xms`) |
 | `SERVER_MEMORY_MAX` | `8G` | JVM maximum heap (`-Xmx`) |
 | `SERVER_PORT` | `25565` | Minecraft game port (host-facing) |
@@ -233,36 +252,52 @@ This runs `packwiz/scripts/update-mods.sh`, which calls `packwiz update --all` a
 
 ### Mod list
 
-| Mod Name | Side | Purpose | Modrinth ID |
-|----------|------|---------|-------------|
-| Fabric API | both | Core Fabric mod library | `P7dR8mSH` |
-| Architectury API | both | Cross-loader API layer | `lhGA9TYQ` |
-| Cloth Config API | both | Configuration screen library | `9s6osm5g` |
-| Modern Industrialization | both | Tech/industrial progression | `IEPAK5x6` |
-| Create Fabric | both | Rotational mechanics and contraptions | `Xbc0uyRg` |
-| Create: Steam 'n' Rails | both | Train and rail expansion for Create | `ZzjhlDgM` |
-| Applied Energistics 2 | both | Item storage and autocrafting network | `XxWD5pD3` |
-| Pipez | both | Item, fluid, and energy pipes | `e6UzDPNM` |
-| Integrated Dynamics | both | Logic and automation network | `E4mKHD0r` |
-| MineColonies | both | NPC colony builder | `UELeoord` |
-| Structurize | both | Structure placement library (MineColonies dep) | `Ln1mcrOm` |
-| Chipped | both | Decorative block variants | `oZ7KFGip` |
-| Supplementaries | both | Functional decorative blocks | `jwdMSMnm` |
-| Macaw's Bridges | both | Buildable bridge blocks | `BckMi1LP` |
-| Macaw's Furniture | both | Furniture blocks | `9IQrlCmU` |
-| Macaw's Windows | both | Decorative windows | `uh5ynCnb` |
-| Macaw's Doors | both | Decorative door variants | `PQ3Mocy9` |
-| Farmer's Delight (Fabric) | both | Farming and cooking expansion | `MXAnMBkQ` |
-| Terralith | both | World-gen overhaul with new biomes | `8oi3bsk5` |
-| Roughly Enough Items (REI) | both | In-game item/recipe browser | `nfn13YXA` |
-| JourneyMap | both | In-game minimap and full-screen map | `lfHFW1mp` |
-| Inventory Profiles Next | both | Inventory sorting and management | `O7RBXm3n` |
-| Mouse Tweaks | both | Improved mouse interactions in inventory | `aC3cM3Vq` |
-| Sodium | client | High-performance rendering engine | `AANobbMI` |
-| Iris Shaders | client | Shader support (works with Sodium) | `YL57xq9U` |
-| Litematica | client | Schematic viewer and builder | `dMEFMghe` |
-| WorldEdit CUI | client | Visual overlay for WorldEdit selections | `HEi11K9s` |
-| Effortless Building | client | Extended placement tools | `7oc4vlUz` |
+42 mods total. Generated from `packwiz/mods/*.pw.toml` — regenerate this table from there if it drifts, don't hand-edit it back out of sync.
+
+| Mod Name | Side | Purpose | Source | ID |
+|----------|------|---------|--------|-----|
+| Applied Energistics 2 | both | Item storage and autocrafting network | Modrinth | `XxWD5pD3` |
+| Architectury API | both | Cross-loader API layer | Modrinth | `lhGA9TYQ` |
+| Athena | both | Connected textures library (Chipped dep) | Modrinth | `b1ZV3DIJ` |
+| BlockUI | both | UI library (MineColonies dep) | CurseForge | `522992` |
+| Chipped | both | Decorative block variants | Modrinth | `BAscRYKm` |
+| Cloth Config API | both | Configuration screen library | Modrinth | `9s6osm5g` |
+| Common Capabilities | both | Capability library (Integrated Dynamics dep) | Modrinth | `oFXrCkDI` |
+| Create | both | Rotational mechanics and contraptions | Modrinth | `LNytGWDc` |
+| Cyclops Core | both | Core library (Integrated Dynamics dep) | Modrinth | `Z9DM0LJ4` |
+| Domum Ornamentum | both | Building block library (MineColonies dep) | CurseForge | `527361` |
+| Effortless Building | client | Extended placement tools | Modrinth | `DYtfQEYj` |
+| Farmer's Delight | both | Farming and cooking expansion | Modrinth | `R2OftAxM` |
+| GuideME | both | In-game guidebook library (AE2 / Modern Industrialization dep) | Modrinth | `Ck4E7v7R` |
+| Integrated Dynamics | both | Logic and automation network | Modrinth | `yYzdQHJI` |
+| Inventory Profiles Next | both | Inventory sorting and management | Modrinth | `O7RBXm3n` |
+| Iris Shaders | client | Shader support (works with Sodium) | Modrinth | `YL57xq9U` |
+| JourneyMap | both | In-game minimap and full-screen map | Modrinth | `lfHFW1mp` |
+| Kotlin for Forge | both | Kotlin runtime library (Inventory Profiles Next dep) | Modrinth | `ordsPcFz` |
+| Lithostitched | both | World-gen datapack library (Terralith dep) | Modrinth | `XaDC71GB` |
+| Macaw's Bridges | both | Buildable bridge blocks | Modrinth | `GURcjz8O` |
+| Macaw's Doors | both | Decorative door variants | Modrinth | `kNxa8z3e` |
+| Macaw's Furniture | both | Furniture blocks | Modrinth | `dtWC90iB` |
+| Macaw's Windows | both | Decorative windows | Modrinth | `C7I0BCni` |
+| MineColonies | both | NPC colony builder | CurseForge | `245506` |
+| Modern Industrialization | both | Tech/industrial progression | Modrinth | `Gov5Dboq` |
+| Moonlight Lib | both | Shared library (Supplementaries dep) | Modrinth | `twkfQtEc` |
+| Mouse Tweaks | both | Improved mouse interactions in inventory | Modrinth | `aC3cM3Vq` |
+| Multi Piston | both | Piston extension library (MineColonies dep) | CurseForge | `303278` |
+| Pipez | both | Item, fluid, and energy pipes | Modrinth | `iRmWy6ga` |
+| Reese's Sodium Options | client | Extra Sodium video options (Sodium Options API dep) | Modrinth | `Bh37bMuy` |
+| Resourceful Lib | both | Shared library (Chipped dep) | Modrinth | `G1hIVOrD` |
+| Roughly Enough Items (REI) | both | In-game item/recipe browser | Modrinth | `nfn13YXA` |
+| Sodium | client | High-performance rendering engine | Modrinth | `AANobbMI` |
+| Sodium Dynamic Lights | client | Dynamic light sources from held/dropped items | Modrinth | `PxQSWIcD` |
+| Sodium Extra | client | Additional Sodium video options and QoL | Modrinth | `PtjYWJkn` |
+| Sodium Options API | client | Options screen API (Sodium Dynamic Lights dep) | Modrinth | `Es5v4eyq` |
+| Structurize | both | Structure placement library (MineColonies dep) | CurseForge | `298744` |
+| Supplementaries | both | Functional decorative blocks | Modrinth | `fFEIiSDQ` |
+| Terralith | both | World-gen overhaul with new biomes | Modrinth | `8oi3bsk5` |
+| WorldEdit | both | World editing tool for builders | Modrinth | `1u6JkXh5` |
+| WorldEdit CUI (Unofficial Forge Port) | client | Visual overlay for WorldEdit selections | Modrinth | `lOELapP1` |
+| libIPN | both | Library for Inventory Profiles Next | Modrinth | `onSQdWhM` |
 
 ---
 
@@ -487,7 +522,7 @@ systemctl disable minecraft.service
 ```
 minecraft-infra/
 ├── packwiz/            # Mod pack definition (packwiz format)
-│   ├── pack.toml       # Pack metadata (name, MC version, Fabric version)
+│   ├── pack.toml       # Pack metadata (name, MC version, NeoForge version)
 │   ├── index.toml      # File index with SHA-256 hashes
 │   └── mods/           # One .pw.toml per mod
 ├── server/             # Docker Compose stack
