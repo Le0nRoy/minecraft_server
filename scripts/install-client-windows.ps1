@@ -36,7 +36,7 @@ $LwjglVersion        = "3.3.3"
 $BootstrapUrl        = "https://github.com/packwiz/packwiz-installer-bootstrap/releases/latest/download/packwiz-installer-bootstrap.jar"
 $PackwizPackUrl      = "https://raw.githubusercontent.com/Le0nRoy/minecraft_server/neoforge-1.21.1-migration/packwiz/pack.toml"
 $PrismDownloadUrl    = "https://prismlauncher.org/download/windows"
-$PrismDirectUrl      = "https://github.com/PrismLauncher/PrismLauncher/releases/latest/download/PrismLauncher-Windows-Setup.exe"
+$PrismReleasesApiUrl = "https://api.github.com/repos/PrismLauncher/PrismLauncher/releases/latest"
 $AdoptiumApiUrl      = "https://api.adoptium.net/v3/assets/feature_releases/21/ga?image_type=jdk&os=windows&architecture=x64&vendor=eclipse&page_size=1"
 $JavaDownloadPageUrl = "https://adoptium.net/temurin/releases/?version=21"
 
@@ -96,6 +96,31 @@ function Find-PrismLauncher {
     return $null
 }
 
+function Get-LatestPrismInstallerUrl {
+    # PrismLauncher's release asset filenames carry the version number and a
+    # toolchain suffix (e.g. PrismLauncher-Windows-MSVC-Setup-11.0.3.exe), so
+    # a hardcoded "latest/download/PrismLauncher-Windows-Setup.exe" URL goes
+    # stale and 404s every time they cut a new release under a new name -
+    # exactly what happened here. Resolve it from the GitHub API instead,
+    # the same way Get-LatestTemurinInstallerUrl already does for Java.
+    try {
+        $release = Invoke-RestMethod -Uri $PrismReleasesApiUrl -UseBasicParsing
+        $isArm = $env:PROCESSOR_ARCHITECTURE -eq "ARM64" -or $env:PROCESSOR_ARCHITEW6432 -eq "ARM64"
+        $pattern = if ($isArm) {
+            '^PrismLauncher-Windows-MSVC-arm64-Setup-.*\.exe$'
+        } else {
+            '^PrismLauncher-Windows-MSVC-Setup-.*\.exe$'
+        }
+        $asset = $release.assets | Where-Object { $_.name -match $pattern } | Select-Object -First 1
+        if ($asset) {
+            return $asset.browser_download_url
+        }
+        return $null
+    } catch {
+        return $null
+    }
+}
+
 function Install-PrismLauncher {
     $answer = Show-MessageBox `
         -Message "Prism Launcher does not appear to be installed on this machine.`n`nWould you like to download and install it automatically?`n`n(Clicking 'No' will open the download page in your browser instead, so you can choose your own install location.)" `
@@ -104,12 +129,24 @@ function Install-PrismLauncher {
         -Icon Question
 
     if ($answer -eq [System.Windows.Forms.DialogResult]::Yes) {
+        Write-Step "Looking up the latest Prism Launcher installer..."
+        $installerUrl = Get-LatestPrismInstallerUrl
+        if (-not $installerUrl) {
+            Write-Warn "Could not resolve the latest Prism Launcher installer URL automatically."
+            Show-MessageBox `
+                -Message "Could not determine the latest Prism Launcher installer automatically.`n`nOpening the manual download page instead." `
+                -Title "Prism Launcher Auto-Install Failed" `
+                -Icon Warning
+            Start-Process $PrismDownloadUrl
+            exit 1
+        }
+
         Write-Step "Downloading Prism Launcher installer..."
         $installerPath = Join-Path $env:TEMP "PrismLauncher-Setup.exe"
 
         try {
             $webClient = New-Object System.Net.WebClient
-            $webClient.DownloadFile($PrismDirectUrl, $installerPath)
+            $webClient.DownloadFile($installerUrl, $installerPath)
             Write-OK "Downloaded Prism Launcher installer."
         } catch {
             Show-MessageBox `
