@@ -112,6 +112,8 @@ iex (irm https://raw.githubusercontent.com/Le0nRoy/minecraft_server/neoforge-1.2
 ```
 This downloads and runs the script entirely in memory — nothing is saved to disk, so there's no risk of the "access denied" error you'd get trying to save a file into a protected folder like `C:\Windows\System32`.
 
+Prefer double-clicking instead of typing a command? Download [`install-client-windows.bat`](scripts/install-client-windows.bat) and double-click it. Explorer normally can't run `.ps1` files directly — double-clicking one (or using "Run with PowerShell") skips the `-ExecutionPolicy Bypass` flag, hits the default Restricted execution policy, and the window closes instantly with an error before you can read it. The `.bat` wrapper calls PowerShell with the right flags and keeps the window open.
+
 **Linux**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Le0nRoy/minecraft_server/neoforge-1.21.1-migration/scripts/install-client-linux.sh | bash
