@@ -73,14 +73,25 @@ function Find-TemurinUninstallers {
         }
         $withName = @($entries | Where-Object { $_.PSObject.Properties.Name -contains "DisplayName" -and $_.DisplayName })
         Write-DiagLine "$p -> $($withName.Count) subkeys have a non-empty DisplayName"
-        $matches = @($withName | Where-Object { $_.DisplayName -match "Temurin" -and $_.DisplayName -match "21" })
-        if ($matches.Count -gt 0) {
-            Write-DiagLine "matched: $(($matches | ForEach-Object { $_.DisplayName }) -join '; ')"
+        # Named $javaMatches, not $matches - "$matches"/"$Matches" is a
+        # PowerShell automatic variable that the -match operator itself
+        # writes to, which is exactly the kind of thing worth not
+        # shadowing even if it happens to work out here.
+        $javaMatches = @($withName | Where-Object { $_.DisplayName -match "Temurin" -and $_.DisplayName -match "21" })
+        if ($javaMatches.Count -gt 0) {
+            Write-DiagLine "matched: $(($javaMatches | ForEach-Object { $_.DisplayName }) -join '; ')"
         }
-        foreach ($m in $matches) { $found += $m }
+        foreach ($m in $javaMatches) { $found += $m }
     }
     Write-Log "Find-TemurinUninstallers returning $($found.Count) entries total"
-    return $found
+    # The comma operator forces this to be emitted as a single array object
+    # instead of PowerShell unwrapping a one-element array into a bare
+    # scalar on the pipeline - without it, when exactly one Java install is
+    # found, the caller's `$javaEntries.Count` check silently misbehaves
+    # even though this function's own $found.Count was correctly 1 (this
+    # is precisely the "не найдена" bug: it only ever failed when there was
+    # exactly one match, which is exactly the normal case).
+    return ,$found
 }
 
 $javaEntries = Find-TemurinUninstallers
