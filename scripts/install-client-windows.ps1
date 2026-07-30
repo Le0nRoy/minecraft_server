@@ -229,14 +229,31 @@ function Find-RegisteredJava21 {
         "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"
     )
     foreach ($path in $uninstallPaths) {
-        Get-ItemProperty -Path $path -ErrorAction SilentlyContinue |
-            Where-Object { $_.DisplayName -match "Temurin" -and $_.DisplayName -match "21" } |
-            ForEach-Object {
+        $entries = Get-ItemProperty -Path $path -ErrorAction SilentlyContinue
+        foreach ($entry in $entries) {
+            # Not every uninstall subkey has a DisplayName value at all (some
+            # are just leftover component registrations) - under
+            # Set-StrictMode -Version Latest, reading a property that isn't
+            # present on the object throws instead of returning $null, so
+            # check for its existence first.
+            if ($entry.PSObject.Properties.Name -notcontains "DisplayName") {
+                continue
+            }
+            $displayName = $entry.DisplayName
+            if ($displayName -and $displayName -match "Temurin" -and $displayName -match "21") {
+                $installLocation = $null
+                if ($entry.PSObject.Properties.Name -contains "InstallLocation") {
+                    $installLocation = $entry.InstallLocation
+                }
+                # A plain `return` here only exits this foreach iteration if
+                # written inside ForEach-Object - using a real foreach loop
+                # instead so this actually returns from the function.
                 return [PSCustomObject]@{
-                    DisplayName     = $_.DisplayName
-                    InstallLocation = $_.InstallLocation
+                    DisplayName     = $displayName
+                    InstallLocation = $installLocation
                 }
             }
+        }
     }
     return $null
 }
