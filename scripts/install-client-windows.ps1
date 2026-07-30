@@ -16,7 +16,7 @@
 
 .NOTES
     Run from PowerShell 5.1+ (ships with Windows 10/11):
-        powershell -NoExit -ExecutionPolicy Bypass -File install-client-windows.ps1
+        powershell -ExecutionPolicy Bypass -File install-client-windows.ps1
     Or double-click install-client-windows.bat instead, which runs this
     file with the right flags for you.
 #>
@@ -485,7 +485,7 @@ if "%PARENT_DIR:~-1%"=="\" set "PARENT_DIR=%PARENT_DIR:~0,-1%"
 set "INSTANCE_DIR=%PARENT_DIR%\$InstanceDirName"
 set "TMPPS1=%TEMP%\mip-uninstall-%RANDOM%.ps1"
 copy "%~dp0uninstall-infra-modpack.ps1" "%TMPPS1%" >nul
-start "Uninstall Minecraft Infra Pack" powershell -NoExit -ExecutionPolicy Bypass -File "%TMPPS1%" -InstanceDir "%INSTANCE_DIR%"
+start "Uninstall Minecraft Infra Pack" powershell -ExecutionPolicy Bypass -File "%TMPPS1%" -InstanceDir "%INSTANCE_DIR%"
 exit /b
 "@
 
