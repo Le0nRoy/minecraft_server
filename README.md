@@ -95,7 +95,12 @@ The server will be reachable at `<host-ip>:25565`.
 
 ## Quick Start — Client
 
-The pack targets **NeoForge 1.21.1** and needs **Java 21+** on the client (not 17 — NeoForge 21.1.x requires 21). Prism Launcher is required; the installer scripts below will offer to install it if missing.
+The pack targets **NeoForge 1.21.1** and needs **Java 21+** on the client (not 17 — NeoForge 21.1.x requires 21). Prism Launcher is required.
+
+All three installer scripts now:
+- Detect Prism Launcher, or offer to install it automatically if missing.
+- Detect Java 21+, or offer to install it automatically if missing/too old (via the official Adoptium Temurin installer on Windows/macOS, or your system package manager on Linux).
+- Locate Prism Launcher's **real** instances directory and create the instance directly inside it — no manual folder picking, no zip import, no copying files around. A folder picker only appears as a last-resort fallback if the instances directory genuinely can't be determined.
 
 ### Don't have the repo cloned? You don't need it.
 
@@ -123,23 +128,23 @@ Linux:
 ```bash
 bash scripts/install-client-linux.sh
 ```
-The script detects or installs Prism Launcher (Flatpak, Snap, or native), verifies Java 21+, and creates a pre-configured NeoForge 1.21.1 instance. On first launch packwiz automatically downloads all mods.
+Detects or installs Prism Launcher (Flatpak, Snap, or native); detects or installs Java 21+ via `apt`/`dnf`/`pacman`/Flatpak (asks for `sudo` where needed); creates the instance directly inside Prism's detected data directory. On first launch packwiz automatically downloads all mods.
 
 Windows — right-click `scripts/install-client-windows.ps1` and choose **Run with PowerShell**, or:
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\install-client-windows.ps1
 ```
-A folder-picker dialog asks where to install the instance. Prism Launcher is detected or downloaded automatically. Java 21 is verified; a link to Adoptium Temurin is offered if it is missing.
+Detects or installs Prism Launcher; detects or installs Java 21 (downloads the latest Temurin MSI from Adoptium and runs it silently, with your confirmation first); locates `%APPDATA%\PrismLauncher\instances` (or the portable install's own `instances/` folder, if detected) and creates the instance there directly.
 
 macOS:
 ```bash
 bash scripts/install-client-macos.sh
 ```
-The script opens a native macOS folder picker (via `osascript`), verifies Prism Launcher in `~/Applications` or `/Applications`, checks Java 21 via `/usr/libexec/java_home`, and creates the instance. A macOS notification confirms completion.
+Detects or installs Prism Launcher (via Homebrew if available, or points you to the download page); detects or installs Java 21 (Homebrew cask, or the official Adoptium `.pkg` installer via `sudo installer`); locates `~/Library/Application Support/PrismLauncher/instances` and creates the instance there directly. A macOS notification confirms completion.
 
-### Loading the created instance into Prism Launcher
+### If the instances directory can't be auto-detected
 
-The script writes a plain instance folder (`instance.cfg` + `mmc-pack.json` + `.minecraft/`), not a zip — **don't** use "Add Instance → Import from zip or folder" for it, that dialog expects a zip archive and will just show you an empty result. Instead:
+This is a fallback path, not the normal one — all three scripts should locate Prism's real instances directory on their own. If it ever fails, you'll be asked to pick a folder yourself; in that case, **don't** use "Add Instance → Import from zip or folder" on the result (that dialog expects a zip archive and will just show an empty result). Instead:
 
 1. Open Prism Launcher.
 2. In the main window, open the folder view for your instances — click the **Instances** icon on the top toolbar, then **View Instance Folder** (localized builds: **"Экземпляры"** → **"Папки"**). This opens the real instances directory in your file browser.
