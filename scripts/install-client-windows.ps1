@@ -214,6 +214,44 @@ function Test-JavaVersion {
     return $true, -1
 }
 
+function Find-RegisteredJava21 {
+    # java -version on PATH can miss an already-installed JDK (stale PATH in
+    # this shell, PATH never refreshed since install, etc). Before offering
+    # to run the MSI installer, check the Windows Installer registry
+    # directly - if Temurin 21 is already registered per-machine, re-running
+    # msiexec /i on it drops into repair/maintenance mode instead of a fresh
+    # install and fails with exit code 1603 (source resolution failure),
+    # since the freshly re-downloaded MSI lives at a different temp path
+    # than whatever the original install used.
+    $uninstallPaths = @(
+        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
+        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
+        "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"
+    )
+    foreach ($path in $uninstallPaths) {
+        Get-ItemProperty -Path $path -ErrorAction SilentlyContinue |
+            Where-Object { $_.DisplayName -match "Temurin" -and $_.DisplayName -match "21" } |
+            ForEach-Object {
+                return [PSCustomObject]@{
+                    DisplayName     = $_.DisplayName
+                    InstallLocation = $_.InstallLocation
+                }
+            }
+    }
+    return $null
+}
+
+function Update-CurrentProcessPath {
+    # Merges the Machine + User PATH from the registry into this process's
+    # PATH. A PATH change made by an MSI installer only reaches processes
+    # started after that point - this script's own PowerShell session may
+    # have been launched before Java was installed, so `java` resolves to
+    # nothing until we pull the current PATH in manually.
+    $machinePath = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
+    $userPath    = [System.Environment]::GetEnvironmentVariable("Path", "User")
+    $env:Path = "$machinePath;$userPath"
+}
+
 function Get-LatestTemurinInstallerUrl {
     try {
         $response = Invoke-RestMethod -Uri $AdoptiumApiUrl -UseBasicParsing
@@ -265,7 +303,7 @@ function Install-Java {
             throw "msiexec exited with code 1625 (installation rejected). This almost always means it ran without administrator rights, or a Group Policy on this machine blocks MSI installs. Try again and approve the UAC prompt, or install manually as an administrator."
         }
         if ($proc.ExitCode -eq 1603) {
-            throw "msiexec exited with code 1603 (fatal error during installation - a generic code, the real reason is only in the log). Common causes: a pending Windows restart from a previous install/uninstall, or leftover files/registry entries from a prior Java install attempt. Try restarting Windows and running this again. Log saved to: $logPath"
+            throw "msiexec exited with code 1603 (fatal error during installation - a generic code, the real reason is only in the log). This often means this exact Java 21 build is already registered on this machine, and msiexec dropped into repair mode instead of a fresh install. Restart Windows (so any pending Java changes finish applying) and run this installer again - it will now detect the existing install first instead of retrying msiexec blindly. Log saved to: $logPath"
         }
         if ($proc.ExitCode -ne 0) {
             throw "msiexec exited with code $($proc.ExitCode). Log saved to: $logPath"
@@ -294,6 +332,26 @@ function Confirm-JavaVersion {
     $javaFound, $javaVersion = Test-JavaVersion
 
     $needsInstall = (-not $javaFound) -or ($javaVersion -ne -1 -and $javaVersion -lt 21)
+
+    if ($needsInstall) {
+        # Not found on PATH - before concluding Java is missing, check
+        # whether it is already registered on this machine and just not
+        # visible to this process's PATH yet.
+        $registered = Find-RegisteredJava21
+        if ($registered) {
+            Write-Warn "Java 21 (Temurin) is already registered on this machine ($($registered.DisplayName)) but wasn't found on PATH - refreshing PATH for this session..."
+            Update-CurrentProcessPath
+            $javaFound, $javaVersion = Test-JavaVersion
+            $needsInstall = (-not $javaFound) -or ($javaVersion -ne -1 -and $javaVersion -lt 21)
+
+            if ($needsInstall) {
+                Write-OK "Java 21 is already installed ($($registered.DisplayName)); skipping installer to avoid re-running the MSI over an existing install (which fails with error 1603)."
+                Write-Warn "It's not resolvable as 'java' in this window though. Restart Windows (or at least log out/in) so the PATH change takes effect everywhere, or in Prism Launcher use the Java settings page's Auto-detect button and point it at:`n$($registered.InstallLocation)bin\javaw.exe"
+                return
+            }
+        }
+    }
+
     if (-not $needsInstall) {
         if ($javaVersion -eq -1) {
             Write-OK "Java detected (version could not be parsed - verify it is 21+)."
