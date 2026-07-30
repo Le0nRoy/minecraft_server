@@ -29,6 +29,10 @@ if ($confirm -ne [System.Windows.Forms.DialogResult]::Yes) {
 }
 
 function Find-TemurinUninstallers {
+    # Two "не найдена" reports in a row despite the registry key being
+    # confirmed present by hand mean the static logic isn't the whole
+    # story - dump per-path scan counts so the next run gives hard facts
+    # instead of another guess.
     $paths = @(
         "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
         "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
@@ -36,9 +40,19 @@ function Find-TemurinUninstallers {
     )
     $found = @()
     foreach ($p in $paths) {
-        Get-ItemProperty -Path $p -ErrorAction SilentlyContinue | Where-Object {
-            $_.DisplayName -match "Temurin" -and $_.DisplayName -match "21"
-        } | ForEach-Object { $found += $_ }
+        $err = $null
+        $entries = @(Get-ItemProperty -Path $p -ErrorAction SilentlyContinue -ErrorVariable err)
+        Write-Host "  [diag] $p -> $($entries.Count) subkeys read" -ForegroundColor DarkGray
+        if ($err) {
+            Write-Host "  [diag] Get-ItemProperty error: $($err[0])" -ForegroundColor DarkGray
+        }
+        $withName = @($entries | Where-Object { $_.PSObject.Properties.Name -contains "DisplayName" -and $_.DisplayName })
+        Write-Host "  [diag] $p -> $($withName.Count) subkeys have a non-empty DisplayName" -ForegroundColor DarkGray
+        $matches = @($withName | Where-Object { $_.DisplayName -match "Temurin" -and $_.DisplayName -match "21" })
+        if ($matches.Count -gt 0) {
+            Write-Host "  [diag] matched: $(($matches | ForEach-Object { $_.DisplayName }) -join '; ')" -ForegroundColor DarkGray
+        }
+        foreach ($m in $matches) { $found += $m }
     }
     return $found
 }
