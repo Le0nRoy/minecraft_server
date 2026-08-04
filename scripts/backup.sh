@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # backup.sh — Create a timestamped backup of the Minecraft server world, config, and mods.
 #
+# The world itself lives inside the "minecraft_data" Docker named volume (mounted
+# at /data in the container), not on the host filesystem, so it can't be tar'd
+# directly. This script exports the world folder(s) out of that volume via a
+# short-lived helper container before archiving, then discards the export.
+#
 # Usage: ./scripts/backup.sh [--dry-run]
 #
 # Environment variables (sourced from ../.env if present):
@@ -8,6 +13,8 @@
 #   BACKUP_RETENTION_DAYS   — How many days to keep backups (default: 14)
 #   RCON_PASSWORD           — RCON password for pausing world saves
 #   RCON_PORT               — RCON port (default: 25575)
+#   LEVEL                   — World folder name inside the volume (default: world)
+#   COMPOSE_PROJECT_NAME    — Used to guess the volume name if the container isn't running
 #   TELEGRAM_BOT_TOKEN      — Telegram bot token for failure notifications
 #   TELEGRAM_CHAT_ID        — Telegram chat ID for failure notifications
 
@@ -117,11 +124,20 @@ BACKUP_PATH="${BACKUP_DIR}/${BACKUP_FILENAME}"
 # ---------------------------------------------------------------------------
 
 BACKUP_SOURCES=(
-    "server/world"
     "server/config"
     "packwiz"
     ".env.example"
 )
+
+# The world doesn't live on the host - it's inside the "minecraft_data" Docker
+# volume - so it's exported to this throwaway directory before archiving and
+# added to TAR_SOURCES separately, further down.
+WORLD_EXPORT_DIR="${PROJECT_ROOT}/.backup-tmp/world-export"
+
+cleanup_world_export() {
+    rm -rf "${PROJECT_ROOT}/.backup-tmp"
+}
+trap cleanup_world_export EXIT
 
 # ---------------------------------------------------------------------------
 # RCON helper
@@ -147,6 +163,29 @@ send_rcon() {
     fi
 
     return 1
+}
+
+# ---------------------------------------------------------------------------
+# World volume helper
+# ---------------------------------------------------------------------------
+
+LEVEL_NAME="${LEVEL:-world}"
+
+# Prefer inspecting the running container's actual /data mount - this is
+# authoritative regardless of what the compose project happens to be named.
+# Falls back to guessing from COMPOSE_PROJECT_NAME if the server is stopped.
+find_data_volume() {
+    local container
+    container="$(docker ps --filter "label=com.minecraft-server.service=minecraft" --format "{{.Names}}" 2>/dev/null | head -1)"
+    if [[ -n "${container}" ]]; then
+        local vol
+        vol="$(docker inspect -f '{{ range .Mounts }}{{ if eq .Destination "/data" }}{{ .Name }}{{ end }}{{ end }}' "${container}" 2>/dev/null)"
+        if [[ -n "${vol}" ]]; then
+            echo "${vol}"
+            return
+        fi
+    fi
+    echo "${COMPOSE_PROJECT_NAME:-minecraft-server}_minecraft_data"
 }
 
 check_rcon() {
@@ -180,6 +219,12 @@ if [[ "${DRY_RUN}" == "true" ]]; then
             warn "  [MISSING] ${full_path}"
         fi
     done
+    DATA_VOLUME="$(find_data_volume)"
+    if docker volume inspect "${DATA_VOLUME}" &>/dev/null; then
+        info "  [EXISTS]  world data in Docker volume '${DATA_VOLUME}' (level: ${LEVEL_NAME})"
+    else
+        warn "  [MISSING] Docker volume '${DATA_VOLUME}' — world would NOT be backed up"
+    fi
     info "Would rotate backups older than ${BACKUP_RETENTION_DAYS} days in ${BACKUP_DIR}"
     info "Dry run complete — no files written"
     exit 0
@@ -207,10 +252,34 @@ if [[ "${rcon_available}" == "true" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
+# Export world data out of the Docker volume
+# ---------------------------------------------------------------------------
+
+DATA_VOLUME="$(find_data_volume)"
+
+if ! docker volume inspect "${DATA_VOLUME}" &>/dev/null; then
+    error "Docker volume '${DATA_VOLUME}' not found — cannot back up the world."
+    error "Is the server running under a different Compose project name? Set COMPOSE_PROJECT_NAME in .env to match."
+    exit 1
+fi
+
+info "Exporting world data ('${LEVEL_NAME}') from volume '${DATA_VOLUME}'..."
+mkdir -p "${WORLD_EXPORT_DIR}"
+docker run --rm \
+    -v "${DATA_VOLUME}:/source:ro" \
+    -v "${WORLD_EXPORT_DIR}:/export" \
+    alpine sh -c "cd /source && for d in '${LEVEL_NAME}' '${LEVEL_NAME}_nether' '${LEVEL_NAME}_the_end'; do [ -d \"\$d\" ] && cp -a \"\$d\" /export/; done; true"
+
+if [[ -z "$(ls -A "${WORLD_EXPORT_DIR}" 2>/dev/null)" ]]; then
+    error "No world folders ('${LEVEL_NAME}', '${LEVEL_NAME}_nether', '${LEVEL_NAME}_the_end') found inside volume '${DATA_VOLUME}'."
+    exit 1
+fi
+
+# ---------------------------------------------------------------------------
 # Build list of existing sources
 # ---------------------------------------------------------------------------
 
-TAR_SOURCES=()
+TAR_SOURCES=(".backup-tmp/world-export")
 for src in "${BACKUP_SOURCES[@]}"; do
     full_path="${PROJECT_ROOT}/${src}"
     if [[ -e "${full_path}" ]]; then
@@ -219,11 +288,6 @@ for src in "${BACKUP_SOURCES[@]}"; do
         warn "Path not found, skipping: ${full_path}"
     fi
 done
-
-if [[ ${#TAR_SOURCES[@]} -eq 0 ]]; then
-    error "No backup sources exist — aborting"
-    exit 1
-fi
 
 # ---------------------------------------------------------------------------
 # Create archive

@@ -11,6 +11,9 @@ server/world/
 server/logs/
 server/crash-reports/
 
+# Temporary world export used by scripts/backup.sh
+.backup-tmp/
+
 # Java artifacts (exclude packwiz directory)
 *.jar
 !packwiz/**/*.jar
