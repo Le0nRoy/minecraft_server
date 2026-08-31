@@ -20,7 +20,7 @@ set -euo pipefail
 PACK_NAME="Minecraft Infra Pack 1.21.1 (NeoForge)"
 INSTANCE_DIRNAME="minecraft-infra-pack"
 PACKWIZ_BOOTSTRAP_URL="https://github.com/packwiz/packwiz-installer-bootstrap/releases/latest/download/packwiz-installer-bootstrap.jar"
-PACKWIZ_PACK_URL="https://raw.githubusercontent.com/Le0nRoy/minecraft_server/neoforge-1.21.1-migration/packwiz/pack.toml"
+PACKWIZ_PACK_URL="https://raw.githubusercontent.com/Le0nRoy/minecraft_server/main/packwiz/pack.toml"
 MC_VERSION="1.21.1"
 NEOFORGE_VERSION="21.1.244"
 LWJGL_VERSION="3.3.3"

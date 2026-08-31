@@ -110,19 +110,19 @@ All three installer scripts are self-contained (every URL inside them is absolut
 
 - **One-liner**: open PowerShell and run:
   ```powershell
-  iex (irm https://raw.githubusercontent.com/Le0nRoy/minecraft_server/neoforge-1.21.1-migration/scripts/install-client-windows.ps1)
+  iex (irm https://raw.githubusercontent.com/Le0nRoy/minecraft_server/main/scripts/install-client-windows.ps1)
   ```
   This downloads and runs the script entirely in memory — nothing is saved to disk, so there's no risk of the "access denied" error you'd get trying to save a file into a protected folder like `C:\Windows\System32`.
 - **Double-click**: download [`install-client-windows.bat`](scripts/install-client-windows.bat) and double-click it. Explorer normally can't run `.ps1` files directly — double-clicking one (or using "Run with PowerShell") skips the `-ExecutionPolicy Bypass` flag, hits the default Restricted execution policy, and the window closes instantly with an error before you can read it. This `.bat` fetches `install-client-windows.ps1` fresh from GitHub and runs it with the right flags, keeping the window open.
 
 **Linux**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Le0nRoy/minecraft_server/neoforge-1.21.1-migration/scripts/install-client-linux.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Le0nRoy/minecraft_server/main/scripts/install-client-linux.sh | bash
 ```
 
 **macOS**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Le0nRoy/minecraft_server/neoforge-1.21.1-migration/scripts/install-client-macos.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Le0nRoy/minecraft_server/main/scripts/install-client-macos.sh | bash
 ```
 
 ### If you do have the repo
@@ -166,8 +166,8 @@ The Windows installer writes `uninstall-infra-modpack.bat` and `uninstall-infra-
 If you installed before this feature existed, grab both files from the repo and save them into your Prism instances folder (as siblings of `minecraft-infra-pack`, not inside it):
 ```powershell
 $dir = "$env:APPDATA\PrismLauncher\instances"
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Le0nRoy/minecraft_server/neoforge-1.21.1-migration/scripts/uninstall-infra-modpack.ps1" -OutFile "$dir\uninstall-infra-modpack.ps1"
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Le0nRoy/minecraft_server/neoforge-1.21.1-migration/scripts/uninstall-infra-modpack.bat" -OutFile "$dir\uninstall-infra-modpack.bat"
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Le0nRoy/minecraft_server/main/scripts/uninstall-infra-modpack.ps1" -OutFile "$dir\uninstall-infra-modpack.ps1"
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Le0nRoy/minecraft_server/main/scripts/uninstall-infra-modpack.bat" -OutFile "$dir\uninstall-infra-modpack.bat"
 ```
 
 ---

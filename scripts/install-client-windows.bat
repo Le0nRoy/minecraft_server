@@ -12,4 +12,4 @@ REM
 REM Always fetches the current script from GitHub, so it stays in sync with
 REM the repo without needing the .ps1 file to sit next to it.
 
-powershell -ExecutionPolicy Bypass -Command "iex (irm 'https://raw.githubusercontent.com/Le0nRoy/minecraft_server/neoforge-1.21.1-migration/scripts/install-client-windows.ps1')"
+powershell -ExecutionPolicy Bypass -Command "iex (irm 'https://raw.githubusercontent.com/Le0nRoy/minecraft_server/main/scripts/install-client-windows.ps1')"
