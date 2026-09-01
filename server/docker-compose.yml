@@ -73,6 +73,7 @@ services:
       RCON_HOST: "minecraft"
       RCON_PORT: "25575"
       RCON_PASSWORD: "${RCON_PASSWORD}"
+      ADMIN_USER_IDS: "${ADMIN_USER_IDS:-}"
     depends_on:
       - minecraft
     networks:

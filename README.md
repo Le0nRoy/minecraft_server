@@ -385,6 +385,11 @@ The Telegram bot is an optional Docker Compose profile (`telegram`). It polls th
 | `/status` | Current server status (online/offline, player count) |
 | `/players` | List currently online players |
 | `/backup` | Trigger a world backup from Telegram |
+| `/op`, `/deop`, `/kick`, `/ban`, `/pardon` | Player management (admin only) |
+| `/whitelist <add\|remove> <player>` | Manage whitelist (admin only) |
+| `/rcon <command>` | Raw RCON passthrough (admin only) |
+
+Admin commands are available only to Telegram user IDs listed in `ADMIN_USER_IDS` and require the service to run with `--profile telegram`.
 
 **Setup steps:**
 
