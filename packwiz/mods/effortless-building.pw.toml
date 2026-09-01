@@ -1,6 +1,6 @@
 name = "Effortless Building"
 filename = "effortlessbuilding-4.2+1.21.1.jar"
-side = "client"
+side = "both"
 
 [download]
 url = "https://cdn.modrinth.com/data/DYtfQEYj/versions/YxnBXtLv/effortlessbuilding-4.2%2B1.21.1.jar"

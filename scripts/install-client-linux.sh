@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
-# install-client-linux.sh — Install the Minecraft Infra Pack modpack on Linux via Prism Launcher.
+# install-client-linux.sh - Install the Minecraft Infra Pack modpack on Linux via Prism Launcher.
 #
 # Usage: bash install-client-linux.sh
 #
 # Environment overrides:
-#   PRISM_LAUNCHER_DIR   — Override auto-detection of Prism Launcher data directory
+#   PRISM_LAUNCHER_DIR - Override auto-detection of Prism Launcher data directory
 #
 # The script will:
 #   1. Locate (or offer to install) Prism Launcher
-#   2. Verify Java 17+ is available
+#   2. Verify (or offer to install) Java 21+
 #   3. Download packwiz-installer-bootstrap.jar
-#   4. Create a fully configured Prism Launcher instance for Fabric 1.20.1
+#   4. Create a fully configured Prism Launcher instance for NeoForge 1.21.1,
+#      directly inside Prism's real "instances" directory
 #   5. Configure packwiz bootstrap so mods sync automatically on launch
 
 set -euo pipefail
@@ -19,12 +20,13 @@ set -euo pipefail
 # Constants
 # ---------------------------------------------------------------------------
 
-PACK_NAME="Minecraft Infra Pack 1.20.1"
+PACK_NAME="Minecraft Infra Pack 1.21.1 (NeoForge)"
 INSTANCE_DIRNAME="minecraft-infra-pack"
 PACKWIZ_BOOTSTRAP_URL="https://github.com/packwiz/packwiz-installer-bootstrap/releases/latest/download/packwiz-installer-bootstrap.jar"
-PACKWIZ_PACK_URL="https://raw.githubusercontent.com/YOUR_ORG/minecraft-infra/main/packwiz/pack.toml"
-MC_VERSION="1.20.1"
-FABRIC_VERSION="0.15.11"
+PACKWIZ_PACK_URL="https://raw.githubusercontent.com/Le0nRoy/minecraft_server/main/packwiz/pack.toml"
+MC_VERSION="1.21.1"
+NEOFORGE_VERSION="21.1.244"
+LWJGL_VERSION="3.3.3"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -47,7 +49,7 @@ require_cmd() {
 }
 
 # ---------------------------------------------------------------------------
-# Step 1 — Locate Prism Launcher data directory
+# Step 1 - Locate Prism Launcher data directory
 # ---------------------------------------------------------------------------
 
 find_prism_dir() {
@@ -132,42 +134,101 @@ offer_install_prism() {
 }
 
 # ---------------------------------------------------------------------------
-# Step 2 — Check Java 17+
+# Step 2 - Check / auto-install Java 21+
 # ---------------------------------------------------------------------------
+
+get_java_major() {
+    local version_output major
+    version_output="$(java -version 2>&1 | head -1)"
+    # Parse major version from strings like: openjdk version "21.0.7" or "1.8.0_xxx"
+    major="$(echo "${version_output}" | grep -oP '(?<=version ")(1\.\K[0-9]+|[0-9]+)(?=[\."_])' | head -1)"
+    echo "${major}"
+}
+
+install_java() {
+    echo ""
+    warn "Java 21+ is required but was not found (or is too old)."
+    echo ""
+
+    local answer
+    if command -v apt &>/dev/null; then
+        read -r -p "  Install openjdk-21-jre now via apt (needs sudo)? [Y/n] " answer
+        if [[ "${answer,,}" != "n" ]]; then
+            info "Installing openjdk-21-jre via apt..."
+            sudo apt update && sudo apt install -y openjdk-21-jre
+            return $?
+        fi
+    elif command -v dnf &>/dev/null; then
+        read -r -p "  Install java-21-openjdk now via dnf (needs sudo)? [Y/n] " answer
+        if [[ "${answer,,}" != "n" ]]; then
+            info "Installing java-21-openjdk via dnf..."
+            sudo dnf install -y java-21-openjdk
+            return $?
+        fi
+    elif command -v pacman &>/dev/null; then
+        read -r -p "  Install jre21-openjdk now via pacman (needs sudo)? [Y/n] " answer
+        if [[ "${answer,,}" != "n" ]]; then
+            info "Installing jre21-openjdk via pacman..."
+            sudo pacman -S --noconfirm jre21-openjdk
+            return $?
+        fi
+    elif command -v flatpak &>/dev/null; then
+        read -r -p "  Install the Java 21 Flatpak SDK extension now? [Y/n] " answer
+        if [[ "${answer,,}" != "n" ]]; then
+            info "Installing Java 21 via Flatpak..."
+            flatpak install --user -y flathub org.freedesktop.Sdk.Extension.openjdk21
+            return $?
+        fi
+    fi
+
+    echo ""
+    echo "  Install Java 21+ manually, for example:"
+    echo "    sudo apt install openjdk-21-jre       (Debian/Ubuntu)"
+    echo "    sudo dnf install java-21-openjdk      (Fedora/RHEL)"
+    echo "    sudo pacman -S jre21-openjdk           (Arch)"
+    echo "    flatpak install flathub org.freedesktop.Sdk.Extension.openjdk21"
+    return 1
+}
 
 check_java() {
     if ! command -v java &>/dev/null; then
-        warn "Java is not installed or not on PATH."
-        echo "  Minecraft ${MC_VERSION} requires Java 17 or newer."
-        echo "  Install it from your package manager, for example:"
-        echo "    sudo apt install openjdk-17-jre       (Debian/Ubuntu)"
-        echo "    sudo dnf install java-17-openjdk      (Fedora/RHEL)"
-        echo "    sudo pacman -S jre17-openjdk           (Arch)"
-        echo "    flatpak install flathub org.freedesktop.Sdk.Extension.openjdk17"
-        die "Please install Java 17+ and re-run."
+        if ! install_java; then
+            die "Please install Java 21+ and re-run."
+        fi
+    else
+        local major
+        major="$(get_java_major)"
+        if [[ -z "${major}" ]]; then
+            warn "Could not determine Java version from 'java -version' output."
+            warn "Proceeding anyway - ensure Java 21+ is available."
+            return 0
+        fi
+        if (( major < 21 )); then
+            warn "Java ${major} detected, but Minecraft ${MC_VERSION} requires Java 21 or newer."
+            if ! install_java; then
+                die "Please upgrade to Java 21+ and re-run."
+            fi
+        else
+            success "Java ${major} detected."
+            return 0
+        fi
     fi
 
-    local version_output
-    version_output="$(java -version 2>&1 | head -1)"
-    # Parse major version from strings like: openjdk version "17.0.9" or "1.8.0_xxx"
+    # Re-check after an install attempt
+    if ! command -v java &>/dev/null; then
+        die "Java still not found on PATH after installation. Open a new terminal and re-run, or install manually."
+    fi
     local major
-    major="$(echo "${version_output}" | grep -oP '(?<=version ")(1\.\K[0-9]+|[0-9]+)(?=[\."_])' | head -1)"
-
-    if [[ -z "${major}" ]]; then
-        warn "Could not determine Java version from: ${version_output}"
-        warn "Proceeding anyway — ensure Java 17+ is available."
-        return 0
+    major="$(get_java_major)"
+    if [[ -n "${major}" ]] && (( major >= 21 )); then
+        success "Java ${major} installed and detected."
+    else
+        warn "Java was installed but version could not be confirmed as 21+ in this session - open a new terminal and re-run if the instance fails to launch."
     fi
-
-    if (( major < 17 )); then
-        die "Java ${major} detected, but Minecraft ${MC_VERSION} requires Java 17 or newer. Please upgrade."
-    fi
-
-    success "Java ${major} detected."
 }
 
 # ---------------------------------------------------------------------------
-# Step 3 — Download packwiz-installer-bootstrap.jar
+# Step 3 - Download packwiz-installer-bootstrap.jar
 # ---------------------------------------------------------------------------
 
 download_bootstrap() {
@@ -189,7 +250,7 @@ download_bootstrap() {
 }
 
 # ---------------------------------------------------------------------------
-# Step 4 — Create Prism Launcher instance
+# Step 4 - Create Prism Launcher instance
 # ---------------------------------------------------------------------------
 
 create_instance() {
@@ -221,27 +282,31 @@ MaxMemAlloc=4096
 MinMemAlloc=1024
 OverrideJavaArgs=true
 JvmArgs=-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200
+OverrideCommands=true
+PreLaunchCommand="\$INST_JAVA" -jar packwiz-installer-bootstrap.jar ${PACKWIZ_PACK_URL}
 iconKey=default
 name=${PACK_NAME}
-PreLaunchCommand="\$INST_JAVA" -jar packwiz-installer-bootstrap.jar ${PACKWIZ_PACK_URL}
 EOF
 
     # --- mmc-pack.json ---
     info "Writing mmc-pack.json..."
-    cat > "${instance_dir}/mmc-pack.json" <<'EOF'
+    cat > "${instance_dir}/mmc-pack.json" <<EOF
 {
   "components": [
-    {"cachedName": "LWJGL 3", "dependencyOnly": true, "uid": "org.lwjgl3", "version": "3.3.1"},
-    {"cachedName": "Minecraft", "uid": "net.minecraft", "version": "1.20.1"},
-    {"cachedName": "Fabric Loader", "uid": "net.fabricmc.fabric-loader", "version": "0.15.11"}
+    {"cachedName": "LWJGL 3", "dependencyOnly": true, "uid": "org.lwjgl3", "version": "${LWJGL_VERSION}"},
+    {"cachedName": "Minecraft", "important": true, "uid": "net.minecraft", "version": "${MC_VERSION}"},
+    {"cachedName": "NeoForge", "uid": "net.neoforged", "version": "${NEOFORGE_VERSION}"}
   ],
   "formatVersion": 1
 }
 EOF
 
-    # --- Copy bootstrap jar into the instance root ---
+    # --- Copy bootstrap jar into .minecraft ---
+    # Must live here: Prism runs PreLaunchCommand with the instance's
+    # .minecraft directory as its working directory, and the command
+    # above references the jar by relative path.
     info "Copying packwiz-installer-bootstrap.jar into instance..."
-    cp "${bootstrap_jar}" "${instance_dir}/packwiz-installer-bootstrap.jar"
+    cp "${bootstrap_jar}" "${instance_dir}/.minecraft/packwiz-installer-bootstrap.jar"
 
     success "Instance created at: ${instance_dir}"
 }
@@ -253,7 +318,7 @@ EOF
 main() {
     echo ""
     echo "=========================================="
-    echo "  Minecraft Infra Pack — Linux Installer  "
+    echo "  Minecraft Infra Pack - Linux Installer  "
     echo "=========================================="
     echo ""
 
@@ -299,7 +364,7 @@ main() {
     echo "  Next steps:"
     echo "  1. Open Prism Launcher."
     echo "  2. Find the instance named '${PACK_NAME}'."
-    echo "  3. Click Launch — packwiz will automatically download all mods on first run."
+    echo "  3. Click Launch - packwiz will automatically download all mods on first run."
     echo "  4. Enjoy the server!"
     echo ""
     echo "  Note: An internet connection is required on first launch so packwiz"

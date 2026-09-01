@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# install-client-macos.sh — Install the Minecraft Infra Pack modpack on macOS via Prism Launcher.
+# install-client-macos.sh - Install the Minecraft Infra Pack modpack on macOS via Prism Launcher.
 #
 # Usage: bash install-client-macos.sh
 #
 # The script will:
-#   1. Present a native macOS folder picker to choose install location
-#   2. Locate Prism Launcher in ~/Applications or /Applications
-#   3. Verify Java 17+ is available
-#   4. Download packwiz-installer-bootstrap.jar
-#   5. Create a fully configured Prism Launcher instance for Fabric 1.20.1
-#   6. Configure packwiz bootstrap so mods sync automatically on launch
+#   1. Locate (or offer to install) Prism Launcher in ~/Applications or /Applications
+#   2. Verify (or offer to install) Java 21+
+#   3. Download packwiz-installer-bootstrap.jar
+#   4. Create a fully configured Prism Launcher instance for NeoForge 1.21.1,
+#      directly inside Prism's real "instances" directory
+#   5. Configure packwiz bootstrap so mods sync automatically on launch
 
 set -euo pipefail
 
@@ -17,13 +17,15 @@ set -euo pipefail
 # Constants
 # ---------------------------------------------------------------------------
 
-PACK_NAME="Minecraft Infra Pack 1.20.1"
+PACK_NAME="Minecraft Infra Pack 1.21.1 (NeoForge)"
 INSTANCE_DIRNAME="minecraft-infra-pack"
 PACKWIZ_BOOTSTRAP_URL="https://github.com/packwiz/packwiz-installer-bootstrap/releases/latest/download/packwiz-installer-bootstrap.jar"
-PACKWIZ_PACK_URL="https://raw.githubusercontent.com/YOUR_ORG/minecraft-infra/main/packwiz/pack.toml"
-MC_VERSION="1.20.1"
-FABRIC_VERSION="0.15.11"
+PACKWIZ_PACK_URL="https://raw.githubusercontent.com/Le0nRoy/minecraft_server/main/packwiz/pack.toml"
+MC_VERSION="1.21.1"
+NEOFORGE_VERSION="21.1.244"
+LWJGL_VERSION="3.3.3"
 PRISM_DOWNLOAD_URL="https://prismlauncher.org/download/mac"
+ADOPTIUM_API_URL="https://api.adoptium.net/v3/assets/feature_releases/21/ga?image_type=jdk&architecture=x64&vendor=eclipse&page_size=1"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -42,27 +44,7 @@ error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 die()     { error "$*"; exit 1; }
 
 # ---------------------------------------------------------------------------
-# Step 1 — Native folder picker via osascript
-# ---------------------------------------------------------------------------
-
-pick_directory() {
-    local prompt="$1"
-    # osascript returns a POSIX path like /Users/alice/Documents
-    local result
-    result="$(osascript -e "choose folder with prompt \"${prompt}\"" 2>/dev/null)" || return 1
-
-    # osascript returns HFS path (e.g. "Macintosh HD:Users:alice") on older macOS
-    # Modern macOS (10.15+) returns POSIX paths; convert either form.
-    if [[ "${result}" == *:* ]]; then
-        # HFS path — convert via Python
-        result="$(python3 -c "import sys; p=sys.argv[1]; print('/' + p.replace(':','/').lstrip('/').replace('Macintosh HD/','',1))" "${result}")"
-    fi
-
-    echo "${result}"
-}
-
-# ---------------------------------------------------------------------------
-# Step 2 — Locate Prism Launcher
+# Step 1 - Locate (or offer to install) Prism Launcher
 # ---------------------------------------------------------------------------
 
 find_prism_app() {
@@ -85,69 +67,129 @@ offer_install_prism() {
     echo ""
     warn "Prism Launcher is not installed in ~/Applications or /Applications."
     echo ""
-    read -r -p "  Open the Prism Launcher download page in your browser? [Y/n] " answer
+
+    if command -v brew &>/dev/null; then
+        read -r -p "  Install Prism Launcher now via Homebrew? [Y/n] " answer
+        if [[ "${answer,,}" != "n" ]]; then
+            info "Installing Prism Launcher via Homebrew..."
+            brew install --cask prismlauncher
+            return 0
+        fi
+    fi
+
+    read -r -p "  Open the Prism Launcher download page in your browser instead? [Y/n] " answer
     if [[ "${answer,,}" != "n" ]]; then
         open "${PRISM_DOWNLOAD_URL}"
-        echo ""
-        echo "  Please install Prism Launcher, run it once, and then re-run this script."
-    else
-        echo ""
-        echo "  Download Prism Launcher manually from: ${PRISM_DOWNLOAD_URL}"
-        echo "  Run this script again after installation."
     fi
+    echo ""
+    echo "  Please install Prism Launcher, run it once, and then re-run this script."
     exit 1
 }
 
 # ---------------------------------------------------------------------------
-# Step 3 — Check Java 17+
+# Step 2 - Locate Prism Launcher's real "instances" directory
 # ---------------------------------------------------------------------------
 
-check_java() {
-    # macOS ships with a java stub that prompts to install JDK; we skip that
-    if ! /usr/libexec/java_home -v 17 &>/dev/null 2>&1; then
-        # Fallback: check $PATH
-        if ! command -v java &>/dev/null; then
-            warn "Java 17+ is not installed."
-            echo "  Minecraft ${MC_VERSION} requires Java 17 or newer."
-            echo ""
-            echo "  Install options:"
-            echo "    1. Homebrew:    brew install --cask temurin@17"
-            echo "    2. Download:    https://adoptium.net/temurin/releases/?version=17"
-            echo ""
-            read -r -p "  Open the download page now? [Y/n] " answer
-            if [[ "${answer,,}" != "n" ]]; then
-                open "https://adoptium.net/temurin/releases/?version=17"
-            fi
-            die "Please install Java 17+ and re-run."
-        fi
-    fi
+find_prism_data_dir() {
+    local app_path="$1"
 
-    # Use JAVA_HOME from java_home helper if available
-    local java_bin="java"
-    if /usr/libexec/java_home -v 17 &>/dev/null 2>&1; then
-        java_bin="$(/usr/libexec/java_home -v 17)/bin/java"
-    fi
-
-    local version_output
-    version_output="$("${java_bin}" -version 2>&1 | head -1)"
-    local major
-    major="$(echo "${version_output}" | grep -oE '"([0-9]+)' | grep -oE '[0-9]+' | head -1)"
-
-    if [[ -z "${major}" ]]; then
-        warn "Could not parse Java version from: ${version_output}"
-        warn "Proceeding anyway — ensure Java 17+ is configured in Prism Launcher."
+    # Portable installs keep their data (including instances/) right next to
+    # the .app bundle, marked by a prismlauncher.cfg file there.
+    local app_parent
+    app_parent="$(dirname "${app_path}")"
+    if [[ -f "${app_parent}/prismlauncher.cfg" ]]; then
+        echo "${app_parent}"
         return 0
     fi
 
-    if (( major < 17 )); then
-        die "Java ${major} detected, but Minecraft ${MC_VERSION} requires Java 17 or newer."
-    fi
-
-    success "Java ${major} detected."
+    # Installed (non-portable) Prism keeps user data under
+    # ~/Library/Application Support, standard for macOS apps.
+    local standard="${HOME}/Library/Application Support/PrismLauncher"
+    echo "${standard}"
+    return 0
 }
 
 # ---------------------------------------------------------------------------
-# Step 4 — Download packwiz-installer-bootstrap.jar
+# Step 3 - Check / auto-install Java 21+
+# ---------------------------------------------------------------------------
+
+get_java_major() {
+    local java_bin="java"
+    if /usr/libexec/java_home -v 21 &>/dev/null 2>&1; then
+        java_bin="$(/usr/libexec/java_home -v 21)/bin/java"
+    fi
+    local version_output major
+    version_output="$("${java_bin}" -version 2>&1 | head -1)"
+    major="$(echo "${version_output}" | grep -oE '"([0-9]+)' | grep -oE '[0-9]+' | head -1)"
+    echo "${major}"
+}
+
+install_java() {
+    echo ""
+    warn "Java 21+ is required but was not found (or is too old)."
+    echo ""
+
+    if command -v brew &>/dev/null; then
+        read -r -p "  Install Java 21 (Temurin) now via Homebrew? [Y/n] " answer
+        if [[ "${answer,,}" != "n" ]]; then
+            info "Installing Java 21 via Homebrew..."
+            brew install --cask temurin@21
+            return $?
+        fi
+    fi
+
+    info "Looking up the latest Java 21 (Temurin) installer..."
+    local pkg_url
+    pkg_url="$(curl -fsSL "${ADOPTIUM_API_URL}" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d[0]['binaries'][0]['installer']['link'])" 2>/dev/null || true)"
+
+    if [[ -z "${pkg_url}" ]]; then
+        warn "Could not resolve the latest Java 21 installer automatically."
+        echo "  Install manually from: https://adoptium.net/temurin/releases/?version=21"
+        open "https://adoptium.net/temurin/releases/?version=21" 2>/dev/null || true
+        return 1
+    fi
+
+    local tmp_pkg
+    tmp_pkg="$(mktemp -t temurin21).pkg"
+    info "Downloading Java 21 installer..."
+    curl -fsSL --progress-bar -o "${tmp_pkg}" "${pkg_url}"
+
+    info "Installing Java 21 (requires sudo)..."
+    sudo installer -pkg "${tmp_pkg}" -target /
+    local result=$?
+    rm -f "${tmp_pkg}"
+    return ${result}
+}
+
+check_java() {
+    local major
+    major="$(get_java_major)"
+
+    if [[ -n "${major}" ]] && (( major >= 21 )); then
+        success "Java ${major} detected."
+        return 0
+    fi
+
+    if [[ -n "${major}" ]]; then
+        warn "Java ${major} detected, but Minecraft ${MC_VERSION} requires Java 21 or newer."
+    else
+        warn "Java 21+ is not installed."
+    fi
+
+    if ! install_java; then
+        die "Please install Java 21+ manually and re-run."
+    fi
+
+    major="$(get_java_major)"
+    if [[ -n "${major}" ]] && (( major >= 21 )); then
+        success "Java ${major} installed and detected."
+    else
+        warn "Java was installed but version could not be confirmed as 21+ in this session - open a new terminal and re-run if the instance fails to launch."
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Step 4 - Download packwiz-installer-bootstrap.jar
 # ---------------------------------------------------------------------------
 
 download_bootstrap() {
@@ -167,7 +209,7 @@ download_bootstrap() {
 }
 
 # ---------------------------------------------------------------------------
-# Step 5 — Create Prism Launcher instance
+# Step 5 - Create Prism Launcher instance
 # ---------------------------------------------------------------------------
 
 create_instance() {
@@ -199,27 +241,31 @@ MaxMemAlloc=4096
 MinMemAlloc=1024
 OverrideJavaArgs=true
 JvmArgs=-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200
+OverrideCommands=true
+PreLaunchCommand="\$INST_JAVA" -jar packwiz-installer-bootstrap.jar ${PACKWIZ_PACK_URL}
 iconKey=default
 name=${PACK_NAME}
-PreLaunchCommand="\$INST_JAVA" -jar packwiz-installer-bootstrap.jar ${PACKWIZ_PACK_URL}
 EOF
 
     # --- mmc-pack.json ---
     info "Writing mmc-pack.json..."
-    cat > "${instance_dir}/mmc-pack.json" <<'EOF'
+    cat > "${instance_dir}/mmc-pack.json" <<EOF
 {
   "components": [
-    {"cachedName": "LWJGL 3", "dependencyOnly": true, "uid": "org.lwjgl3", "version": "3.3.1"},
-    {"cachedName": "Minecraft", "uid": "net.minecraft", "version": "1.20.1"},
-    {"cachedName": "Fabric Loader", "uid": "net.fabricmc.fabric-loader", "version": "0.15.11"}
+    {"cachedName": "LWJGL 3", "dependencyOnly": true, "uid": "org.lwjgl3", "version": "${LWJGL_VERSION}"},
+    {"cachedName": "Minecraft", "important": true, "uid": "net.minecraft", "version": "${MC_VERSION}"},
+    {"cachedName": "NeoForge", "uid": "net.neoforged", "version": "${NEOFORGE_VERSION}"}
   ],
   "formatVersion": 1
 }
 EOF
 
-    # --- Copy bootstrap jar ---
+    # --- Copy bootstrap jar into .minecraft ---
+    # Must live here: Prism runs PreLaunchCommand with the instance's
+    # .minecraft directory as its working directory, and the command
+    # above references the jar by relative path.
     info "Copying packwiz-installer-bootstrap.jar into instance..."
-    cp "${bootstrap_jar}" "${instance_dir}/packwiz-installer-bootstrap.jar"
+    cp "${bootstrap_jar}" "${instance_dir}/.minecraft/packwiz-installer-bootstrap.jar"
 
     success "Instance created at: ${instance_dir}"
 }
@@ -231,7 +277,7 @@ EOF
 main() {
     echo ""
     echo "==========================================="
-    echo "  Minecraft Infra Pack — macOS Installer   "
+    echo "  Minecraft Infra Pack - macOS Installer   "
     echo "==========================================="
     echo ""
 
@@ -243,37 +289,33 @@ main() {
 
     local bootstrap_jar="${tmp_dir}/packwiz-installer-bootstrap.jar"
 
-    # 1. Folder picker
-    info "Opening folder picker — choose where to install the instance..."
-    local install_dir
-    if ! install_dir="$(pick_directory "Select where to install the Minecraft Infra Pack instance")"; then
-        warn "No folder selected. Installation cancelled."
-        exit 0
-    fi
-    success "Install directory: ${install_dir}"
-
-    # 2. Prism Launcher
+    # 1. Locate (or install) Prism Launcher
     info "Locating Prism Launcher..."
     local prism_app
     if ! prism_app="$(find_prism_app)"; then
         offer_install_prism
+        if ! prism_app="$(find_prism_app)"; then
+            die "Could not locate Prism Launcher after installation. Run it once manually, then re-run this script."
+        fi
     fi
     success "Found Prism Launcher: ${prism_app}"
 
-    # If the user chose a directory that looks like the Prism instances folder
-    # (i.e. it ends with /instances), use it directly; otherwise put the instance
-    # inside the chosen directory.
-    local effective_base="${install_dir}"
+    # 2. Locate its real instances directory
+    info "Locating Prism Launcher's instances directory..."
+    local prism_data_dir instances_dir
+    prism_data_dir="$(find_prism_data_dir "${prism_app}")"
+    instances_dir="${prism_data_dir}/instances"
+    mkdir -p "${instances_dir}"
+    success "Instances directory: ${instances_dir}"
 
     # 3. Java
-    info "Checking Java version..."
     check_java
 
     # 4. Download bootstrap
     download_bootstrap "${bootstrap_jar}"
 
-    # 5. Create instance
-    create_instance "${effective_base}" "${bootstrap_jar}"
+    # 5. Create instance directly inside Prism's instances directory
+    create_instance "${instances_dir}" "${bootstrap_jar}"
 
     # ---------------------------------------------------------------------------
     # Done
@@ -284,18 +326,20 @@ main() {
     echo -e "  ${GREEN}Installation complete!${NC}                 "
     echo "==========================================="
     echo ""
+    echo "  The instance was created directly inside Prism Launcher's instances"
+    echo "  folder - no manual copying needed."
+    echo ""
     echo "  Next steps:"
-    echo "  1. Open Prism Launcher."
-    echo "  2. If the instance does not appear automatically, click 'Add Instance'"
-    echo "     and import the folder: ${effective_base}/${INSTANCE_DIRNAME}"
-    echo "  3. Launch '${PACK_NAME}' — packwiz will download all mods on first run."
+    echo "  1. Open (or restart) Prism Launcher."
+    echo "  2. Find and select '${PACK_NAME}'."
+    echo "  3. Click Launch - packwiz will download all mods on first run."
     echo "  4. Enjoy the server!"
     echo ""
     echo "  Tip: An internet connection is required on first launch."
     echo ""
 
     # Show a native macOS notification
-    osascript -e "display notification \"Instance ready — launch Prism Launcher to play!\" with title \"Minecraft Infra Pack\" subtitle \"Installation complete\"" 2>/dev/null || true
+    osascript -e "display notification \"Instance ready - launch Prism Launcher to play!\" with title \"Minecraft Infra Pack\" subtitle \"Installation complete\"" 2>/dev/null || true
 }
 
 main "$@"
