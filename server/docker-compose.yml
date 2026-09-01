@@ -31,6 +31,8 @@ services:
       SYNC_SKIP_NEWER_IN_DESTINATION: "false"
       OVERRIDE_SERVER_PROPERTIES: "false"
       PACKWIZ_URL: "file:///packwiz/pack.toml"
+      # Hardcoded — intentionally not overridable via .env.
+      # Network access is restricted to Tailscale; Mojang auth is disabled.
       ONLINE_MODE: "false"
       ENFORCE_SECURE_PROFILE: "false"
     volumes:
