@@ -27,6 +27,9 @@ PACKWIZ_PACK_URL="https://raw.githubusercontent.com/Le0nRoy/minecraft_server/mai
 MC_VERSION="1.21.1"
 NEOFORGE_VERSION="21.1.244"
 LWJGL_VERSION="3.3.3"
+POLYMC_RELEASES_API_URL="https://api.github.com/repos/PolyMC/PolyMC/releases/latest"
+POLYMC_APPIMAGE_INSTALL_DIR="${HOME}/.local/bin"
+POLYMC_APPIMAGE_PATH="${HOME}/.local/bin/PolyMC.AppImage"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -64,21 +67,32 @@ find_polymc_dir() {
         fi
     fi
 
-    # Priority 2: native install
+    # Priority 2: standard XDG data directory (covers native installs and AppImage)
     local native="${HOME}/.local/share/PolyMC"
     if [[ -d "${native}" ]]; then
         echo "${native}"
         return 0
     fi
 
-    # Priority 3: Flatpak
-    local flatpak="${HOME}/.var/app/org.polymc.PolyMC/data/PolyMC"
-    if [[ -d "${flatpak}" ]]; then
-        echo "${flatpak}"
-        return 0
-    fi
-
     return 1
+}
+
+get_polymc_appimage_url() {
+    local api_response asset_url
+    if command -v curl &>/dev/null; then
+        api_response="$(curl -fsSL "${POLYMC_RELEASES_API_URL}")"
+    elif command -v wget &>/dev/null; then
+        api_response="$(wget -qO- "${POLYMC_RELEASES_API_URL}")"
+    else
+        return 1
+    fi
+    # Extract the AppImage download URL using only shell builtins + grep
+    asset_url="$(echo "${api_response}" | grep -o '"browser_download_url": *"[^"]*\.AppImage"' | grep -i linux | head -1 | grep -o 'https://[^"]*')"
+    if [[ -z "${asset_url}" ]]; then
+        # Fallback: any AppImage asset in the release
+        asset_url="$(echo "${api_response}" | grep -o '"browser_download_url": *"[^"]*\.AppImage"' | head -1 | grep -o 'https://[^"]*')"
+    fi
+    echo "${asset_url}"
 }
 
 offer_install_polymc() {
@@ -88,28 +102,49 @@ offer_install_polymc() {
     echo "  PolyMC supports offline (no Microsoft account) play out of the box."
     echo ""
 
-    if command -v flatpak &>/dev/null; then
-        echo "  [flatpak detected]"
-        read -r -p "  Install PolyMC via Flatpak now? [y/N] " answer
-        if [[ "${answer,,}" == "y" ]]; then
-            info "Installing PolyMC via Flatpak..."
-            flatpak install --user -y flathub org.polymc.PolyMC
-            # Initialise data directory by launching once, then quitting
-            info "Launching PolyMC briefly to initialise its data directory..."
-            flatpak run org.polymc.PolyMC &
-            local pid=$!
-            sleep 6
-            kill "${pid}" 2>/dev/null || true
-            wait "${pid}" 2>/dev/null || true
-            return 0
+    read -r -p "  Download and install PolyMC AppImage now? [y/N] " answer
+    if [[ "${answer,,}" == "y" ]]; then
+        info "Fetching latest PolyMC release info..."
+        local appimage_url
+        appimage_url="$(get_polymc_appimage_url)" || true
+
+        if [[ -z "${appimage_url}" ]]; then
+            warn "Could not resolve latest PolyMC AppImage URL automatically."
+            echo ""
+            echo "  Download the AppImage manually from:"
+            echo "    https://github.com/PolyMC/PolyMC/releases/latest"
+            echo "  Save it as: ${POLYMC_APPIMAGE_PATH}"
+            echo "  Then run: chmod +x ${POLYMC_APPIMAGE_PATH}"
+            echo "  Launch it once, quit, and re-run this script."
+            exit 1
         fi
+
+        mkdir -p "${POLYMC_APPIMAGE_INSTALL_DIR}"
+        info "Downloading PolyMC AppImage..."
+        if command -v curl &>/dev/null; then
+            curl -fsSL --progress-bar -o "${POLYMC_APPIMAGE_PATH}" "${appimage_url}"
+        else
+            wget -q --show-progress -O "${POLYMC_APPIMAGE_PATH}" "${appimage_url}"
+        fi
+        chmod +x "${POLYMC_APPIMAGE_PATH}"
+        success "PolyMC AppImage saved to: ${POLYMC_APPIMAGE_PATH}"
+
+        # Launch once to initialise the data directory, then quit
+        info "Launching PolyMC briefly to initialise its data directory..."
+        "${POLYMC_APPIMAGE_PATH}" &
+        local pid=$!
+        local deadline=$(( SECONDS + 15 ))
+        while [[ ! -d "${HOME}/.local/share/PolyMC" ]] && (( SECONDS < deadline )); do
+            sleep 1
+        done
+        kill "${pid}" 2>/dev/null || true
+        wait "${pid}" 2>/dev/null || true
+        return 0
     fi
 
     echo ""
-    echo "  Please install PolyMC manually:"
-    echo "    https://polymc.org/download/linux"
-    echo "    or: https://github.com/PolyMC/PolyMC/releases/latest"
-    echo ""
+    echo "  Download the AppImage manually from:"
+    echo "    https://github.com/PolyMC/PolyMC/releases/latest"
     echo "  Run this script again after installation."
     exit 1
 }
@@ -153,13 +188,6 @@ install_java() {
             sudo pacman -S --noconfirm jre21-openjdk
             return $?
         fi
-    elif command -v flatpak &>/dev/null; then
-        read -r -p "  Install the Java 21 Flatpak SDK extension now? [Y/n] " answer
-        if [[ "${answer,,}" != "n" ]]; then
-            info "Installing Java 21 via Flatpak..."
-            flatpak install --user -y flathub org.freedesktop.Sdk.Extension.openjdk21
-            return $?
-        fi
     fi
 
     echo ""
@@ -167,7 +195,6 @@ install_java() {
     echo "    sudo apt install openjdk-21-jre       (Debian/Ubuntu)"
     echo "    sudo dnf install java-21-openjdk      (Fedora/RHEL)"
     echo "    sudo pacman -S jre21-openjdk           (Arch)"
-    echo "    flatpak install flathub org.freedesktop.Sdk.Extension.openjdk21"
     return 1
 }
 

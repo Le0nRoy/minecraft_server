@@ -24,7 +24,7 @@ PACKWIZ_PACK_URL="https://raw.githubusercontent.com/Le0nRoy/minecraft_server/mai
 MC_VERSION="1.21.1"
 NEOFORGE_VERSION="21.1.244"
 LWJGL_VERSION="3.3.3"
-POLYMC_DOWNLOAD_URL="https://polymc.org/download/mac"
+POLYMC_RELEASES_API_URL="https://api.github.com/repos/PolyMC/PolyMC/releases/latest"
 ADOPTIUM_API_URL="https://api.adoptium.net/v3/assets/feature_releases/21/ga?image_type=jdk&architecture=x64&vendor=eclipse&page_size=1"
 
 # ---------------------------------------------------------------------------
@@ -63,28 +63,56 @@ find_polymc_app() {
     return 1
 }
 
+get_polymc_dmg_url() {
+    local api_response asset_url
+    api_response="$(curl -fsSL "${POLYMC_RELEASES_API_URL}")"
+    asset_url="$(echo "${api_response}" | grep -o '"browser_download_url": *"[^"]*\.dmg"' | head -1 | grep -o 'https://[^"]*')"
+    echo "${asset_url}"
+}
+
 offer_install_polymc() {
     echo ""
     warn "PolyMC is not installed in ~/Applications or /Applications."
     echo "  PolyMC supports offline (no Microsoft account) play out of the box."
     echo ""
 
-    if command -v brew &>/dev/null; then
-        read -r -p "  Install PolyMC now via Homebrew? [Y/n] " answer
-        if [[ "${answer,,}" != "n" ]]; then
-            info "Installing PolyMC via Homebrew..."
-            brew install --cask polymc
-            return 0
-        fi
+    read -r -p "  Download and install PolyMC from the release binary now? [Y/n] " answer
+    if [[ "${answer,,}" == "n" ]]; then
+        echo ""
+        echo "  Download manually from: https://github.com/PolyMC/PolyMC/releases/latest"
+        echo "  Copy PolyMC.app to ~/Applications, then re-run this script."
+        exit 1
     fi
 
-    read -r -p "  Open the PolyMC download page in your browser instead? [Y/n] " answer
-    if [[ "${answer,,}" != "n" ]]; then
-        open "${POLYMC_DOWNLOAD_URL}"
+    info "Fetching latest PolyMC release info..."
+    local dmg_url
+    dmg_url="$(get_polymc_dmg_url)" || true
+
+    if [[ -z "${dmg_url}" ]]; then
+        warn "Could not resolve latest PolyMC DMG URL automatically."
+        echo "  Download manually from: https://github.com/PolyMC/PolyMC/releases/latest"
+        echo "  Copy PolyMC.app to ~/Applications, then re-run this script."
+        exit 1
     fi
-    echo ""
-    echo "  Please install PolyMC, run it once, and then re-run this script."
-    exit 1
+
+    local tmp_dmg
+    tmp_dmg="$(mktemp -t PolyMC).dmg"
+    info "Downloading PolyMC DMG..."
+    curl -fsSL --progress-bar -o "${tmp_dmg}" "${dmg_url}"
+
+    info "Mounting DMG..."
+    local mount_point
+    mount_point="$(hdiutil attach "${tmp_dmg}" -nobrowse -readonly | awk 'END{print $NF}')"
+
+    info "Copying PolyMC.app to ~/Applications..."
+    mkdir -p "${HOME}/Applications"
+    cp -R "${mount_point}/PolyMC.app" "${HOME}/Applications/"
+
+    info "Unmounting DMG..."
+    hdiutil detach "${mount_point}" -quiet
+    rm -f "${tmp_dmg}"
+
+    success "PolyMC installed to ~/Applications/PolyMC.app"
 }
 
 # ---------------------------------------------------------------------------
@@ -129,15 +157,6 @@ install_java() {
     echo ""
     warn "Java 21+ is required but was not found (or is too old)."
     echo ""
-
-    if command -v brew &>/dev/null; then
-        read -r -p "  Install Java 21 (Temurin) now via Homebrew? [Y/n] " answer
-        if [[ "${answer,,}" != "n" ]]; then
-            info "Installing Java 21 via Homebrew..."
-            brew install --cask temurin@21
-            return $?
-        fi
-    fi
 
     info "Looking up the latest Java 21 (Temurin) installer..."
     local pkg_url
