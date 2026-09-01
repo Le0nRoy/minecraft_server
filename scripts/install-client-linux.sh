@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# install-client-linux.sh - Install the Minecraft Infra Pack modpack on Linux via Prism Launcher.
+# install-client-linux.sh - Install the Minecraft Infra Pack modpack on Linux via PolyMC.
 #
 # Usage: bash install-client-linux.sh
 #
 # Environment overrides:
-#   PRISM_LAUNCHER_DIR - Override auto-detection of Prism Launcher data directory
+#   POLYMC_DIR - Override auto-detection of PolyMC data directory
 #
 # The script will:
-#   1. Locate (or offer to install) Prism Launcher
+#   1. Locate (or offer to install) PolyMC
 #   2. Verify (or offer to install) Java 21+
 #   3. Download packwiz-installer-bootstrap.jar
-#   4. Create a fully configured Prism Launcher instance for NeoForge 1.21.1,
-#      directly inside Prism's real "instances" directory
+#   4. Create a fully configured PolyMC instance for NeoForge 1.21.1,
+#      directly inside PolyMC's real "instances" directory
 #   5. Configure packwiz bootstrap so mods sync automatically on launch
 
 set -euo pipefail
@@ -49,74 +49,54 @@ require_cmd() {
 }
 
 # ---------------------------------------------------------------------------
-# Step 1 - Locate Prism Launcher data directory
+# Step 1 - Locate PolyMC data directory
 # ---------------------------------------------------------------------------
 
-find_prism_dir() {
+find_polymc_dir() {
     # Priority 1: environment override
-    if [[ -n "${PRISM_LAUNCHER_DIR:-}" ]]; then
-        if [[ -d "${PRISM_LAUNCHER_DIR}" ]]; then
-            echo "${PRISM_LAUNCHER_DIR}"
+    if [[ -n "${POLYMC_DIR:-}" ]]; then
+        if [[ -d "${POLYMC_DIR}" ]]; then
+            echo "${POLYMC_DIR}"
             return 0
         else
-            warn "PRISM_LAUNCHER_DIR is set to '${PRISM_LAUNCHER_DIR}' but the directory does not exist."
+            warn "POLYMC_DIR is set to '${POLYMC_DIR}' but the directory does not exist."
             warn "Falling through to auto-detection."
         fi
     fi
 
     # Priority 2: native install
-    local native="${HOME}/.local/share/PrismLauncher"
+    local native="${HOME}/.local/share/PolyMC"
     if [[ -d "${native}" ]]; then
         echo "${native}"
         return 0
     fi
 
     # Priority 3: Flatpak
-    local flatpak="${HOME}/.var/app/org.prismlauncher.PrismLauncher/data/PrismLauncher"
+    local flatpak="${HOME}/.var/app/org.polymc.PolyMC/data/PolyMC"
     if [[ -d "${flatpak}" ]]; then
         echo "${flatpak}"
-        return 0
-    fi
-
-    # Priority 4: Snap
-    local snap="${HOME}/snap/prismlauncher/current/.local/share/PrismLauncher"
-    if [[ -d "${snap}" ]]; then
-        echo "${snap}"
         return 0
     fi
 
     return 1
 }
 
-offer_install_prism() {
+offer_install_polymc() {
     echo ""
-    warn "Prism Launcher does not appear to be installed."
-    echo "  This installer requires Prism Launcher to manage the modpack instance."
+    warn "PolyMC does not appear to be installed."
+    echo "  This installer requires PolyMC to manage the modpack instance."
+    echo "  PolyMC supports offline (no Microsoft account) play out of the box."
     echo ""
 
     if command -v flatpak &>/dev/null; then
         echo "  [flatpak detected]"
-        read -r -p "  Install Prism Launcher via Flatpak now? [y/N] " answer
+        read -r -p "  Install PolyMC via Flatpak now? [y/N] " answer
         if [[ "${answer,,}" == "y" ]]; then
-            info "Installing Prism Launcher via Flatpak..."
-            flatpak install --user -y flathub org.prismlauncher.PrismLauncher
+            info "Installing PolyMC via Flatpak..."
+            flatpak install --user -y flathub org.polymc.PolyMC
             # Initialise data directory by launching once, then quitting
-            info "Launching Prism Launcher briefly to initialise its data directory..."
-            flatpak run org.prismlauncher.PrismLauncher &
-            local pid=$!
-            sleep 6
-            kill "${pid}" 2>/dev/null || true
-            wait "${pid}" 2>/dev/null || true
-            return 0
-        fi
-    elif command -v snap &>/dev/null; then
-        echo "  [snap detected]"
-        read -r -p "  Install Prism Launcher via Snap now? [y/N] " answer
-        if [[ "${answer,,}" == "y" ]]; then
-            info "Installing Prism Launcher via Snap..."
-            sudo snap install prismlauncher
-            info "Launching Prism Launcher briefly to initialise its data directory..."
-            snap run prismlauncher &
+            info "Launching PolyMC briefly to initialise its data directory..."
+            flatpak run org.polymc.PolyMC &
             local pid=$!
             sleep 6
             kill "${pid}" 2>/dev/null || true
@@ -126,8 +106,9 @@ offer_install_prism() {
     fi
 
     echo ""
-    echo "  Please install Prism Launcher manually:"
-    echo "    https://prismlauncher.org/download/linux"
+    echo "  Please install PolyMC manually:"
+    echo "    https://polymc.org/download/linux"
+    echo "    or: https://github.com/PolyMC/PolyMC/releases/latest"
     echo ""
     echo "  Run this script again after installation."
     exit 1
@@ -250,13 +231,13 @@ download_bootstrap() {
 }
 
 # ---------------------------------------------------------------------------
-# Step 4 - Create Prism Launcher instance
+# Step 4 - Create PolyMC instance
 # ---------------------------------------------------------------------------
 
 create_instance() {
-    local prism_dir="$1"
+    local polymc_dir="$1"
     local bootstrap_jar="$2"
-    local instance_dir="${prism_dir}/instances/${INSTANCE_DIRNAME}"
+    local instance_dir="${polymc_dir}/instances/${INSTANCE_DIRNAME}"
 
     if [[ -d "${instance_dir}" ]]; then
         warn "Instance directory already exists: ${instance_dir}"
@@ -302,7 +283,7 @@ EOF
 EOF
 
     # --- Copy bootstrap jar into .minecraft ---
-    # Must live here: Prism runs PreLaunchCommand with the instance's
+    # Must live here: PolyMC runs PreLaunchCommand with the instance's
     # .minecraft directory as its working directory, and the command
     # above references the jar by relative path.
     info "Copying packwiz-installer-bootstrap.jar into instance..."
@@ -330,17 +311,17 @@ main() {
 
     local bootstrap_jar="${tmp_dir}/packwiz-installer-bootstrap.jar"
 
-    # 1. Locate Prism Launcher
-    info "Locating Prism Launcher data directory..."
-    local prism_dir
-    if ! prism_dir="$(find_prism_dir)"; then
-        offer_install_prism
+    # 1. Locate PolyMC
+    info "Locating PolyMC data directory..."
+    local polymc_dir
+    if ! polymc_dir="$(find_polymc_dir)"; then
+        offer_install_polymc
         # Try again after installation
-        if ! prism_dir="$(find_prism_dir)"; then
-            die "Could not locate Prism Launcher data directory even after installation attempt. Run the launcher once manually, then re-run this script."
+        if ! polymc_dir="$(find_polymc_dir)"; then
+            die "Could not locate PolyMC data directory even after installation attempt. Run the launcher once manually, then re-run this script."
         fi
     fi
-    success "Found Prism Launcher data directory: ${prism_dir}"
+    success "Found PolyMC data directory: ${polymc_dir}"
 
     # 2. Check Java
     info "Checking Java version..."
@@ -350,7 +331,7 @@ main() {
     download_bootstrap "${bootstrap_jar}"
 
     # 4. Create instance
-    create_instance "${prism_dir}" "${bootstrap_jar}"
+    create_instance "${polymc_dir}" "${bootstrap_jar}"
 
     # ---------------------------------------------------------------------------
     # Done
@@ -362,10 +343,11 @@ main() {
     echo "=========================================="
     echo ""
     echo "  Next steps:"
-    echo "  1. Open Prism Launcher."
-    echo "  2. Find the instance named '${PACK_NAME}'."
-    echo "  3. Click Launch - packwiz will automatically download all mods on first run."
-    echo "  4. Enjoy the server!"
+    echo "  1. Open PolyMC."
+    echo "  2. Add an offline account: Accounts (top-right) → Add Offline → enter any username."
+    echo "  3. Find the instance named '${PACK_NAME}'."
+    echo "  4. Click Launch - packwiz will automatically download all mods on first run."
+    echo "  5. Connect to the server — no Microsoft account required."
     echo ""
     echo "  Note: An internet connection is required on first launch so packwiz"
     echo "        can fetch all mod files."
