@@ -9,9 +9,11 @@ import asyncio
 import functools
 import logging
 import os
+import secrets
 import signal
 import subprocess
 import sys
+import time
 
 import aiohttp
 from mcrcon import MCRcon, MCRconException
@@ -42,6 +44,8 @@ HEALTHCHECK_PORT: str = os.environ.get("HEALTHCHECK_PORT", "8080")
 HEALTH_URL: str = f"http://{HEALTHCHECK_HOST}:{HEALTHCHECK_PORT}/health"
 POLL_INTERVAL: int = 60  # seconds between health polls
 BACKUP_SCRIPT: str = "/scripts/backup.sh"
+WIPE_SCRIPT: str = os.environ.get("WIPE_SCRIPT", "/scripts/wipe.sh")
+WIPE_TOKEN_TTL: int = 60  # seconds a wipe confirmation token stays valid
 
 RCON_HOST: str = os.environ.get("RCON_HOST", "minecraft")
 RCON_PORT: int = int(os.environ.get("RCON_PORT", "25575"))
@@ -62,6 +66,13 @@ def _parse_admin_ids(raw: str) -> list[int]:
 
 
 ADMIN_USER_IDS: list[int] = _parse_admin_ids(os.environ.get("ADMIN_USER_IDS", ""))
+
+# ---------------------------------------------------------------------------
+# Wipe confirmation state
+# ---------------------------------------------------------------------------
+
+# Maps user_id → (token, expiry_timestamp).  Single-process; no DB needed.
+_wipe_pending: dict[int, tuple[str, float]] = {}
 
 # ---------------------------------------------------------------------------
 # Admin helpers
@@ -221,6 +232,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             "/op /deop /kick /ban /pardon — player management\n"
             "/whitelist <add|remove> <player>\n"
             "/rcon <command> — raw RCON passthrough\n"
+            "/wipe — wipe world data (requires token confirmation)\n"
         )
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
@@ -443,6 +455,92 @@ async def cmd_backup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         )
 
 
+@require_admin
+async def cmd_wipe(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Two-step world wipe: first call issues a token, second call with that token executes."""
+    user = update.effective_user
+
+    if not context.args:
+        # Issue (or refresh) a confirmation token
+        token = secrets.token_hex(8)
+        expiry = time.time() + WIPE_TOKEN_TTL
+        action = "refreshed" if user.id in _wipe_pending else "issued"
+        _wipe_pending[user.id] = (token, expiry)
+        logger.info("WIPE token %s user_id=%d user=%s", action, user.id, user.username)
+        await update.message.reply_text(
+            f"⚠️ *World wipe requested.*\n\n"
+            f"To confirm, send within {WIPE_TOKEN_TTL}s:\n"
+            f"`/wipe {token}`\n\n"
+            f"This will delete all world data and restart the server.",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    # Token provided — validate
+    provided_token = context.args[0]
+    pending = _wipe_pending.get(user.id)
+
+    if pending is None:
+        await update.message.reply_text("❌ No pending wipe. Run /wipe first to get a token.")
+        return
+
+    stored_token, expiry = pending
+
+    if time.time() >= expiry:
+        del _wipe_pending[user.id]
+        logger.warning("WIPE token expired user_id=%d user=%s", user.id, user.username)
+        await update.message.reply_text("❌ Wipe token expired. Run /wipe again.")
+        return
+
+    if provided_token != stored_token:
+        logger.warning("WIPE invalid token user_id=%d user=%s", user.id, user.username)
+        await update.message.reply_text("❌ Invalid wipe token.")
+        return
+
+    # Token valid — execute wipe
+    del _wipe_pending[user.id]
+    logger.info("WIPE initiated user_id=%d user=%s", user.id, user.username)
+    await update.message.reply_text("🗑️ Wipe confirmed — starting wipe script…")
+
+    try:
+        result = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: subprocess.run(
+                [WIPE_SCRIPT],
+                capture_output=True,
+                text=True,
+                timeout=300,
+            ),
+        )
+    except FileNotFoundError:
+        msg = f"❌ Wipe script not found at `{WIPE_SCRIPT}`."
+        logger.error("WIPE failed user_id=%d script not found", user.id)
+        await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
+        return
+    except subprocess.TimeoutExpired:
+        logger.error("WIPE failed user_id=%d timed out", user.id)
+        await update.message.reply_text("❌ Wipe timed out after 5 minutes.")
+        return
+
+    if result.returncode != 0:
+        stderr = (result.stderr or result.stdout or "Unknown error").strip()[:400]
+        logger.error(
+            "WIPE failed user_id=%d user=%s returncode=%d stderr=%r",
+            user.id, user.username, result.returncode, stderr,
+        )
+        await update.message.reply_text(
+            f"❌ Wipe failed (exit {result.returncode}):\n```\n{stderr}\n```",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    logger.info("WIPE completed user_id=%d user=%s", user.id, user.username)
+    actor = user.username or str(user.id)
+    success_msg = f"🗑️ World wipe completed by {actor}. Server is restarting."
+    await update.message.reply_text(success_msg)
+    await _notify(context.bot, success_msg)
+
+
 # ---------------------------------------------------------------------------
 # Background health polling
 # ---------------------------------------------------------------------------
@@ -558,6 +656,7 @@ def main() -> None:
     application.add_handler(CommandHandler("pardon", cmd_pardon))
     application.add_handler(CommandHandler("whitelist", cmd_whitelist))
     application.add_handler(CommandHandler("rcon", cmd_rcon))
+    application.add_handler(CommandHandler("wipe", cmd_wipe))
 
     # Register SIGTERM handler for graceful Docker shutdown
     signal.signal(signal.SIGTERM, lambda *_: handle_sigterm(application))
