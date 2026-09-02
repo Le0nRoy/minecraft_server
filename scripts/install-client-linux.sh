@@ -28,8 +28,8 @@ MC_VERSION="1.21.1"
 NEOFORGE_VERSION="21.1.244"
 LWJGL_VERSION="3.3.3"
 POLYMC_RELEASES_API_URL="https://api.github.com/repos/PolyMC/PolyMC/releases/latest"
-POLYMC_APPIMAGE_INSTALL_DIR="${HOME}/.local/bin"
-POLYMC_APPIMAGE_PATH="${HOME}/.local/bin/PolyMC.AppImage"
+POLYMC_APPIMAGE_INSTALL_DIR="${HOME}/Applications"
+POLYMC_APPIMAGE_PATH="${HOME}/Applications/PolyMC.AppImage"
 
 # ---------------------------------------------------------------------------
 # Helpers

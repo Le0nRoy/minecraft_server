@@ -71,10 +71,23 @@ get_polymc_dmg_url() {
 }
 
 offer_install_polymc() {
+    local tmp_dir="$1"
+
     echo ""
     warn "PolyMC is not installed in ~/Applications or /Applications."
     echo "  PolyMC supports offline (no Microsoft account) play out of the box."
     echo ""
+
+    # Try Homebrew first if available
+    if command -v brew &>/dev/null; then
+        info "Homebrew detected — trying 'brew install --cask polymc'..."
+        if brew install --cask polymc; then
+            success "PolyMC installed via Homebrew."
+            return 0
+        fi
+        warn "Homebrew cask install failed — falling back to direct DMG download."
+        echo ""
+    fi
 
     read -r -p "  Download and install PolyMC from the release binary now? [Y/n] " answer
     if [[ "${answer,,}" == "n" ]]; then
@@ -95,8 +108,8 @@ offer_install_polymc() {
         exit 1
     fi
 
-    local tmp_dmg
-    tmp_dmg="$(mktemp -t PolyMC).dmg"
+    # Use the caller's tmp_dir so the existing EXIT trap handles cleanup on error
+    local tmp_dmg="${tmp_dir}/PolyMC.dmg"
     info "Downloading PolyMC DMG..."
     curl -fsSL --progress-bar -o "${tmp_dmg}" "${dmg_url}"
 
@@ -110,7 +123,6 @@ offer_install_polymc() {
 
     info "Unmounting DMG..."
     hdiutil detach "${mount_point}" -quiet
-    rm -f "${tmp_dmg}"
 
     success "PolyMC installed to ~/Applications/PolyMC.app"
 }
@@ -313,7 +325,7 @@ main() {
     info "Locating PolyMC..."
     local polymc_app
     if ! polymc_app="$(find_polymc_app)"; then
-        offer_install_polymc
+        offer_install_polymc "${tmp_dir}"
         if ! polymc_app="$(find_polymc_app)"; then
             die "Could not locate PolyMC after installation. Run it once manually, then re-run this script."
         fi
