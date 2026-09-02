@@ -63,6 +63,24 @@ services:
       - minecraft
     restart: unless-stopped
 
+  socket-proxy:
+    image: lscr.io/linuxserver/socket-proxy:latest
+    environment:
+      CONTAINERS: 1    # docker ps / docker inspect (GET)
+      ALLOW_STOP: 1    # docker stop (independent of POST)
+      ALLOW_START: 1   # docker start (independent of POST)
+      # POST remains 0 (default) — bot cannot create containers
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - socket-proxy
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /run
+    profiles:
+      - telegram
+
   telegram-bot:
     build:
       context: ../telegram-bot
@@ -74,10 +92,20 @@ services:
       RCON_PORT: "25575"
       RCON_PASSWORD: "${RCON_PASSWORD}"
       ADMIN_USER_IDS: "${ADMIN_USER_IDS:-}"
+      DOCKER_HOST: "tcp://socket-proxy:2375"
+      WIPE_SCRIPT: "/scripts/wipe.sh"
+      RCON_WARN_DELAY: "${RCON_WARN_DELAY:-10}"
+      MINECRAFT_DATA_PATH: "/minecraft_data"
+      LEVEL: "${LEVEL:-world}"
+    volumes:
+      - ../scripts:/scripts:ro
+      - minecraft_data:/minecraft_data:rw
     depends_on:
       - minecraft
+      - socket-proxy
     networks:
       - minecraft
+      - socket-proxy
     restart: unless-stopped
     profiles:
       - telegram
@@ -87,4 +115,6 @@ volumes:
 
 networks:
   minecraft:
+    driver: bridge
+  socket-proxy:
     driver: bridge
