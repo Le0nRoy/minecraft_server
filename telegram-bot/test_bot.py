@@ -318,5 +318,213 @@ class TestAdminHandlers(unittest.TestCase):
         self.assertNotIn("Admin commands", call_text)
 
 
+# ---------------------------------------------------------------------------
+# /wipe command
+# ---------------------------------------------------------------------------
+
+WIPE_TOKEN_TTL = 60
+
+
+class TestCmdWipe(unittest.TestCase):
+    def setUp(self):
+        self._orig_admins = bot.ADMIN_USER_IDS
+        bot.ADMIN_USER_IDS = [ADMIN_ID]
+        # Reset pending wipe state before each test
+        bot._wipe_pending.clear()
+
+    def tearDown(self):
+        bot.ADMIN_USER_IDS = self._orig_admins
+        bot._wipe_pending.clear()
+
+    # -- non-admin blocked --
+
+    def test_wipe_non_admin_rejected(self):
+        update = _make_update(NON_ADMIN_ID)
+        ctx = _make_context()
+        run(bot.cmd_wipe(update, ctx))
+        update.message.reply_text.assert_called_once_with("⛔ Not authorised.")
+        self.assertEqual(bot._wipe_pending, {})
+
+    # -- first /wipe (no args, no pending) → issues token --
+
+    def test_wipe_no_pending_issues_token(self):
+        update = _make_update(ADMIN_ID)
+        ctx = _make_context()
+        run(bot.cmd_wipe(update, ctx))
+        self.assertIn(ADMIN_ID, bot._wipe_pending)
+        token, expiry = bot._wipe_pending[ADMIN_ID]
+        import time
+        self.assertGreater(expiry, time.time())
+        reply_text = update.message.reply_text.call_args[0][0]
+        self.assertIn(token, reply_text)
+
+    # -- second /wipe with no args → refreshes token --
+
+    def test_wipe_existing_pending_refreshes_token(self):
+        import time
+        # Pre-populate with an old token
+        bot._wipe_pending[ADMIN_ID] = ("old-token", time.time() + 30)
+        update = _make_update(ADMIN_ID)
+        ctx = _make_context()
+        run(bot.cmd_wipe(update, ctx))
+        token, expiry = bot._wipe_pending[ADMIN_ID]
+        self.assertNotEqual(token, "old-token")
+        reply_text = update.message.reply_text.call_args[0][0]
+        self.assertIn(token, reply_text)
+
+    # -- /wipe <token> with valid token → runs script --
+
+    def test_wipe_valid_token_runs_script(self):
+        import time
+        token = "abc123"
+        bot._wipe_pending[ADMIN_ID] = (token, time.time() + 60)
+        update = _make_update(ADMIN_ID)
+        ctx = _make_context(token)
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "Wipe complete"
+        mock_result.stderr = ""
+
+        with patch("subprocess.run", return_value=mock_result) as mock_run, \
+             patch.object(bot, "_notify", new=AsyncMock()) as mock_notify:
+            run(bot.cmd_wipe(update, ctx))
+
+        mock_run.assert_called_once()
+        mock_notify.assert_called_once()
+        notify_text = mock_notify.call_args[0][1]
+        self.assertIn("wipe", notify_text.lower())
+        # Token consumed
+        self.assertNotIn(ADMIN_ID, bot._wipe_pending)
+
+    # -- /wipe <token> with expired token → error, removes pending --
+
+    def test_wipe_expired_token_returns_error(self):
+        import time
+        token = "expiredtoken"
+        bot._wipe_pending[ADMIN_ID] = (token, time.time() - 1)
+        update = _make_update(ADMIN_ID)
+        ctx = _make_context(token)
+
+        with patch("subprocess.run") as mock_run:
+            run(bot.cmd_wipe(update, ctx))
+
+        mock_run.assert_not_called()
+        self.assertNotIn(ADMIN_ID, bot._wipe_pending)
+        reply_text = update.message.reply_text.call_args[0][0]
+        self.assertIn("expired", reply_text.lower())
+
+    # -- /wipe <wrong-token> → error, pending unchanged --
+
+    def test_wipe_wrong_token_returns_invalid(self):
+        import time
+        bot._wipe_pending[ADMIN_ID] = ("correcttoken", time.time() + 60)
+        update = _make_update(ADMIN_ID)
+        ctx = _make_context("wrongtoken")
+
+        with patch("subprocess.run") as mock_run:
+            run(bot.cmd_wipe(update, ctx))
+
+        mock_run.assert_not_called()
+        self.assertIn(ADMIN_ID, bot._wipe_pending)
+        reply_text = update.message.reply_text.call_args[0][0]
+        self.assertIn("invalid", reply_text.lower())
+
+    # -- /wipe <token> with no pending → no pending wipe message --
+
+    def test_wipe_token_arg_no_pending_returns_no_pending(self):
+        update = _make_update(ADMIN_ID)
+        ctx = _make_context("sometoken")
+
+        with patch("subprocess.run") as mock_run:
+            run(bot.cmd_wipe(update, ctx))
+
+        mock_run.assert_not_called()
+        reply_text = update.message.reply_text.call_args[0][0]
+        self.assertIn("no pending", reply_text.lower())
+
+    # -- script FileNotFoundError --
+
+    def test_wipe_script_not_found(self):
+        import time
+        token = "tok"
+        bot._wipe_pending[ADMIN_ID] = (token, time.time() + 60)
+        update = _make_update(ADMIN_ID)
+        ctx = _make_context(token)
+
+        with patch("subprocess.run", side_effect=FileNotFoundError("not found")):
+            run(bot.cmd_wipe(update, ctx))
+
+        reply_text = update.message.reply_text.call_args[0][0]
+        self.assertIn("not found", reply_text.lower())
+
+    # -- script TimeoutExpired --
+
+    def test_wipe_script_timeout(self):
+        import subprocess
+        import time
+        token = "tok"
+        bot._wipe_pending[ADMIN_ID] = (token, time.time() + 60)
+        update = _make_update(ADMIN_ID)
+        ctx = _make_context(token)
+
+        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="wipe.sh", timeout=300)):
+            run(bot.cmd_wipe(update, ctx))
+
+        reply_text = update.message.reply_text.call_args[0][0]
+        self.assertIn("timed out", reply_text.lower())
+
+    # -- script non-zero exit --
+
+    def test_wipe_script_nonzero_exit(self):
+        import time
+        token = "tok"
+        bot._wipe_pending[ADMIN_ID] = (token, time.time() + 60)
+        update = _make_update(ADMIN_ID)
+        ctx = _make_context(token)
+
+        mock_result = MagicMock()
+        mock_result.returncode = 1
+        mock_result.stderr = "docker: permission denied"
+        mock_result.stdout = ""
+
+        with patch("subprocess.run", return_value=mock_result):
+            run(bot.cmd_wipe(update, ctx))
+
+        reply_text = update.message.reply_text.call_args[0][0]
+        self.assertIn("❌", reply_text)
+
+    # -- /start shows /wipe for admin --
+
+    def test_start_admin_sees_wipe_command(self):
+        update = _make_update(ADMIN_ID)
+        ctx = MagicMock()
+        run(bot.cmd_start(update, ctx))
+        call_text = update.message.reply_text.call_args[0][0]
+        self.assertIn("/wipe", call_text)
+
+    # -- two admins get independent tokens --
+
+    def test_two_admins_independent_tokens(self):
+        import time
+        ADMIN_ID_2 = 200
+        self._orig_admins2 = bot.ADMIN_USER_IDS
+        bot.ADMIN_USER_IDS = [ADMIN_ID, ADMIN_ID_2]
+
+        try:
+            update1 = _make_update(ADMIN_ID)
+            update2 = _make_update(ADMIN_ID_2)
+            run(bot.cmd_wipe(update1, _make_context()))
+            run(bot.cmd_wipe(update2, _make_context()))
+
+            self.assertIn(ADMIN_ID, bot._wipe_pending)
+            self.assertIn(ADMIN_ID_2, bot._wipe_pending)
+            token1 = bot._wipe_pending[ADMIN_ID][0]
+            token2 = bot._wipe_pending[ADMIN_ID_2][0]
+            self.assertNotEqual(token1, token2)
+        finally:
+            bot.ADMIN_USER_IDS = self._orig_admins2
+
+
 if __name__ == "__main__":
     unittest.main()
