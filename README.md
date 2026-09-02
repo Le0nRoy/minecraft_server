@@ -388,8 +388,51 @@ The Telegram bot is an optional Docker Compose profile (`telegram`). It polls th
 | `/op`, `/deop`, `/kick`, `/ban`, `/pardon` | Player management (admin only) |
 | `/whitelist <add\|remove> <player>` | Manage whitelist (admin only) |
 | `/rcon <command>` | Raw RCON passthrough (admin only) |
+| `/wipe` | Wipe world data with token confirmation (admin only) |
 
 Admin commands are available only to Telegram user IDs listed in `ADMIN_USER_IDS` and require the service to run with `--profile telegram`.
+
+### Admin: World Wipe
+
+The `/wipe` command performs a destructive, irreversible world reset. It uses a two-step token confirmation to prevent accidental execution.
+
+**Flow:**
+
+1. Admin sends `/wipe` → bot replies with a one-time token valid for 60 seconds.
+2. Admin sends `/wipe <token>` within 60 seconds → bot executes `scripts/wipe.sh`.
+3. If the same admin sends `/wipe` again before confirming, the old token is invalidated and a new one is issued.
+4. On success, a wipe notification including the actor's username is broadcast to `CHAT_ID`.
+
+**What the wipe script does:**
+
+1. If the Minecraft container is running: sends an in-game RCON warning, waits `RCON_WARN_DELAY` seconds, then stops the container.
+2. Deletes `world/`, `world_nether/`, and `world_the_end/` from the mounted data volume.
+3. Restarts the container so the server generates a fresh world.
+
+**Environment variables:**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RCON_WARN_DELAY` | `10` | Seconds between RCON warning and container stop |
+| `LEVEL` | `world` | World folder name (matches Minecraft `level-name`) |
+
+> **Warning:** Wipe is irreversible. Run `make backup` before wiping if you want to preserve the current world.
+
+### Docker Socket Proxy
+
+The Telegram bot needs to stop and start the Minecraft container during a wipe. Rather than mounting `/var/run/docker.sock` directly in the bot container — which would grant unrestricted Docker API access — the stack uses a [linuxserver/socket-proxy](https://github.com/linuxserver/docker-socket-proxy) sidecar that exposes only the operations the bot needs.
+
+**Permissions granted to the bot via the proxy:**
+
+| Permission | Flag | Purpose |
+|-----------|------|---------|
+| Read container list/inspect | `CONTAINERS=1` | `docker ps` to find the Minecraft container |
+| Stop a container | `ALLOW_STOP=1` | `docker stop` during wipe |
+| Start a container | `ALLOW_START=1` | `docker start` after wipe |
+
+`POST=0` (default) — the bot **cannot** create, pull, or run new containers.
+
+**Trade-off:** The bot container also mounts the `minecraft_data` volume read-write (scoped to `/minecraft_data`) so the wipe script can delete world folders directly with `rm -rf` — eliminating the need for `docker run` and the broader `POST=1` permission. The wipe command is admin-only with 60-second token confirmation, limiting exposure of this write access.
 
 **Setup steps:**
 
