@@ -7,6 +7,7 @@ Exposes GET /auth?ip=<ip> and classifies connecting IPs:
   - All others: denied + Telegram notification sent
 """
 
+import concurrent.futures
 import ipaddress
 import json
 import logging
@@ -34,6 +35,7 @@ LOCAL_NET_PREFIX = ipaddress.ip_network("192.168.0.0/16")
 PING_TIMEOUT_SECONDS = 2
 WHOIS_TIMEOUT_SECONDS = 5
 RDNS_TIMEOUT_SECONDS = 2
+TELEGRAM_TIMEOUT_SECONDS = 10
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -121,9 +123,11 @@ def read_arp_mac(ip: str) -> str:
 
 
 def reverse_dns(ip: str) -> str:
-    """Perform reverse DNS lookup; return empty string on failure."""
+    """Perform reverse DNS lookup; return empty string on failure or timeout."""
     try:
-        return socket.gethostbyaddr(ip)[0]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(socket.gethostbyaddr, ip)
+            return future.result(timeout=RDNS_TIMEOUT_SECONDS)[0]
     except Exception:
         return ""
 
@@ -147,7 +151,7 @@ def send_telegram(text: str) -> None:
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text}
     try:
-        resp = requests.post(url, json=payload, timeout=10)
+        resp = requests.post(url, json=payload, timeout=TELEGRAM_TIMEOUT_SECONDS)
         if not resp.ok:
             log.warning("Telegram API returned %d: %s", resp.status_code, resp.text[:200])
     except Exception as exc:
@@ -174,6 +178,12 @@ def classify_ip(ip: str) -> dict:
 
     if is_local_net(ip):
         identity = resolve_local_identity(ip)
+        if not identity["reachable"]:
+            return {
+                "allowed": False,
+                "reason": "local-net-unreachable",
+                "identity": identity,
+            }
         return {
             "allowed": True,
             "reason": "local-net",

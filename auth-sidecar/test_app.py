@@ -13,7 +13,6 @@ from unittest.mock import MagicMock, patch
 # Import the module under test
 # ---------------------------------------------------------------------------
 
-import importlib
 import os
 
 # Ensure `requests` stub exists before importing app
@@ -161,6 +160,12 @@ class TestClassifyIp(unittest.TestCase):
             decision = app.classify_ip("192.168.1.50")
         self.assertTrue(decision["allowed"])
         self.assertEqual(decision["reason"], "local-net")
+
+    def test_local_unreachable_denied(self):
+        with patch.object(app, "resolve_local_identity", return_value={"reachable": False, "mac": "", "hostname": ""}):
+            decision = app.classify_ip("192.168.1.50")
+        self.assertFalse(decision["allowed"])
+        self.assertEqual(decision["reason"], "local-net-unreachable")
 
     def test_external_denied(self):
         decision = app.classify_ip("8.8.8.8")
