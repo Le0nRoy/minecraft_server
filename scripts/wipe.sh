@@ -26,9 +26,8 @@ find_container() {
 }
 
 send_rcon_warn() {
-    local container="$1"
-    # Try docker exec rcon-cli first (available inside itzg/minecraft-server)
-    if docker exec "$container" rcon-cli --password "${RCON_PASSWORD}" \
+    # Direct TCP RCON — bypasses docker exec (blocked by socket-proxy POST=0)
+    if rcon-cli --host "${RCON_HOST}" --port "${RCON_PORT}" --password "${RCON_PASSWORD}" \
             "say §cServer wipe in ${RCON_WARN_DELAY}s — world data will be erased!" \
             2>/dev/null; then
         return 0

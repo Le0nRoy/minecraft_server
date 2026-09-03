@@ -322,8 +322,6 @@ class TestAdminHandlers(unittest.TestCase):
 # /wipe command
 # ---------------------------------------------------------------------------
 
-WIPE_TOKEN_TTL = 60
-
 
 class TestCmdWipe(unittest.TestCase):
     def setUp(self):
@@ -502,6 +500,22 @@ class TestCmdWipe(unittest.TestCase):
         run(bot.cmd_start(update, ctx))
         call_text = update.message.reply_text.call_args[0][0]
         self.assertIn("/wipe", call_text)
+
+    # -- unexpected OSError propagation (e.g. PermissionError) --
+
+    def test_wipe_script_unexpected_error(self):
+        import time
+        token = "tok"
+        bot._wipe_pending[ADMIN_ID] = (token, time.time() + 60)
+        update = _make_update(ADMIN_ID)
+        ctx = _make_context(token)
+
+        with patch("subprocess.run", side_effect=PermissionError("permission denied")):
+            run(bot.cmd_wipe(update, ctx))
+
+        reply_text = update.message.reply_text.call_args[0][0]
+        self.assertIn("❌", reply_text)
+        self.assertIn("Wipe failed", reply_text)
 
     # -- two admins get independent tokens --
 

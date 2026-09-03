@@ -521,6 +521,10 @@ async def cmd_wipe(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         logger.error("WIPE failed user_id=%d timed out", user.id)
         await update.message.reply_text("❌ Wipe timed out after 5 minutes.")
         return
+    except Exception as exc:
+        logger.error("WIPE unexpected error user_id=%d: %s", user.id, exc, exc_info=True)
+        await update.message.reply_text(f"❌ Wipe failed: {exc}")
+        return
 
     if result.returncode != 0:
         stderr = (result.stderr or result.stdout or "Unknown error").strip()[:400]
