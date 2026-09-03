@@ -31,6 +31,10 @@ services:
       SYNC_SKIP_NEWER_IN_DESTINATION: "false"
       OVERRIDE_SERVER_PROPERTIES: "false"
       PACKWIZ_URL: "file:///packwiz/pack.toml"
+      # Hardcoded — intentionally not overridable via .env.
+      # Network access is restricted to Tailscale; Mojang auth is disabled.
+      ONLINE_MODE: "false"
+      ENFORCE_SECURE_PROFILE: "false"
     volumes:
       - minecraft_data:/data
       - ../packwiz:/packwiz:ro
@@ -80,6 +84,19 @@ services:
     restart: unless-stopped
     profiles:
       - telegram
+
+  auth-sidecar:
+    build:
+      context: ../auth-sidecar
+    network_mode: host
+    environment:
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
+      TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID}"
+      AUTH_SIDECAR_PORT: "${AUTH_SIDECAR_PORT:-8181}"
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+    depends_on:
+      - minecraft
+    restart: unless-stopped
 
 volumes:
   minecraft_data:
