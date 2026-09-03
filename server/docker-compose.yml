@@ -85,6 +85,19 @@ services:
     profiles:
       - telegram
 
+  auth-sidecar:
+    build:
+      context: ../auth-sidecar
+    network_mode: host
+    environment:
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
+      TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID}"
+      AUTH_SIDECAR_PORT: "${AUTH_SIDECAR_PORT:-8181}"
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+    depends_on:
+      - minecraft
+    restart: unless-stopped
+
 volumes:
   minecraft_data:
 
