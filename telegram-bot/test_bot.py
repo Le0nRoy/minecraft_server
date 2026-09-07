@@ -22,7 +22,7 @@ mcrcon_stub = types.ModuleType("mcrcon")
 
 
 class _MCRcon:
-    def __init__(self, host, port, password):
+    def __init__(self, host, password, port=25575):
         pass
 
     def __enter__(self):
@@ -67,7 +67,7 @@ def _make_context(*args) -> MagicMock:
 
 
 def run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 # ---------------------------------------------------------------------------
@@ -238,6 +238,137 @@ class TestAdminHandlers(unittest.TestCase):
             run(bot.cmd_kick(update, ctx))
 
         mock_rcon.assert_called_once_with(bot.RCON_HOST, bot.RCON_PORT, bot.RCON_PASSWORD, "kick Alex")
+
+    def test_kick_rcon_error_replies_error(self):
+        update = _make_update(ADMIN_ID)
+        ctx = _make_context("Alex")
+
+        with patch.object(bot, "_rcon_command", new=AsyncMock(side_effect=OSError("refused"))), \
+             patch.object(bot, "_notify", new=AsyncMock()) as mock_notify:
+            run(bot.cmd_kick(update, ctx))
+
+        mock_notify.assert_not_called()
+        self.assertIn("❌ RCON error", update.message.reply_text.call_args[0][0])
+
+    # -- /deop --
+
+    def test_deop_no_args_returns_usage(self):
+        update = _make_update(ADMIN_ID)
+        ctx = _make_context()
+        run(bot.cmd_deop(update, ctx))
+        update.message.reply_text.assert_called_once_with("Usage: /deop <player>")
+
+    def test_deop_calls_rcon_and_notifies(self):
+        update = _make_update(ADMIN_ID)
+        ctx = _make_context("Steve")
+
+        with patch.object(bot, "_rcon_command", new=AsyncMock(return_value="deopped")) as mock_rcon, \
+             patch.object(bot, "_notify", new=AsyncMock()) as mock_notify:
+            run(bot.cmd_deop(update, ctx))
+
+        mock_rcon.assert_called_once_with(bot.RCON_HOST, bot.RCON_PORT, bot.RCON_PASSWORD, "deop Steve")
+        mock_notify.assert_called_once()
+
+    def test_deop_rcon_error_replies_error_no_notify(self):
+        update = _make_update(ADMIN_ID)
+        ctx = _make_context("Steve")
+
+        with patch.object(bot, "_rcon_command", new=AsyncMock(side_effect=OSError("refused"))), \
+             patch.object(bot, "_notify", new=AsyncMock()) as mock_notify:
+            run(bot.cmd_deop(update, ctx))
+
+        mock_notify.assert_not_called()
+        self.assertIn("❌ RCON error", update.message.reply_text.call_args[0][0])
+
+    def test_deop_non_admin_rejected(self):
+        update = _make_update(NON_ADMIN_ID)
+        ctx = _make_context("Steve")
+
+        with patch.object(bot, "_rcon_command", new=AsyncMock()) as mock_rcon:
+            run(bot.cmd_deop(update, ctx))
+
+        mock_rcon.assert_not_called()
+        update.message.reply_text.assert_called_once_with("⛔ Not authorised.")
+
+    # -- /ban --
+
+    def test_ban_no_args_returns_usage(self):
+        update = _make_update(ADMIN_ID)
+        ctx = _make_context()
+        run(bot.cmd_ban(update, ctx))
+        update.message.reply_text.assert_called_once_with("Usage: /ban <player>")
+
+    def test_ban_calls_rcon_and_notifies(self):
+        update = _make_update(ADMIN_ID)
+        ctx = _make_context("Griefer")
+
+        with patch.object(bot, "_rcon_command", new=AsyncMock(return_value="banned")) as mock_rcon, \
+             patch.object(bot, "_notify", new=AsyncMock()) as mock_notify:
+            run(bot.cmd_ban(update, ctx))
+
+        mock_rcon.assert_called_once_with(bot.RCON_HOST, bot.RCON_PORT, bot.RCON_PASSWORD, "ban Griefer")
+        mock_notify.assert_called_once()
+
+    def test_ban_rcon_error_replies_error_no_notify(self):
+        update = _make_update(ADMIN_ID)
+        ctx = _make_context("Griefer")
+
+        with patch.object(bot, "_rcon_command", new=AsyncMock(side_effect=OSError("refused"))), \
+             patch.object(bot, "_notify", new=AsyncMock()) as mock_notify:
+            run(bot.cmd_ban(update, ctx))
+
+        mock_notify.assert_not_called()
+        self.assertIn("❌ RCON error", update.message.reply_text.call_args[0][0])
+
+    def test_ban_non_admin_rejected(self):
+        update = _make_update(NON_ADMIN_ID)
+        ctx = _make_context("Griefer")
+
+        with patch.object(bot, "_rcon_command", new=AsyncMock()) as mock_rcon:
+            run(bot.cmd_ban(update, ctx))
+
+        mock_rcon.assert_not_called()
+        update.message.reply_text.assert_called_once_with("⛔ Not authorised.")
+
+    # -- /pardon --
+
+    def test_pardon_no_args_returns_usage(self):
+        update = _make_update(ADMIN_ID)
+        ctx = _make_context()
+        run(bot.cmd_pardon(update, ctx))
+        update.message.reply_text.assert_called_once_with("Usage: /pardon <player>")
+
+    def test_pardon_calls_rcon_and_notifies(self):
+        update = _make_update(ADMIN_ID)
+        ctx = _make_context("Steve")
+
+        with patch.object(bot, "_rcon_command", new=AsyncMock(return_value="pardoned")) as mock_rcon, \
+             patch.object(bot, "_notify", new=AsyncMock()) as mock_notify:
+            run(bot.cmd_pardon(update, ctx))
+
+        mock_rcon.assert_called_once_with(bot.RCON_HOST, bot.RCON_PORT, bot.RCON_PASSWORD, "pardon Steve")
+        mock_notify.assert_called_once()
+
+    def test_pardon_rcon_error_replies_error_no_notify(self):
+        update = _make_update(ADMIN_ID)
+        ctx = _make_context("Steve")
+
+        with patch.object(bot, "_rcon_command", new=AsyncMock(side_effect=OSError("refused"))), \
+             patch.object(bot, "_notify", new=AsyncMock()) as mock_notify:
+            run(bot.cmd_pardon(update, ctx))
+
+        mock_notify.assert_not_called()
+        self.assertIn("❌ RCON error", update.message.reply_text.call_args[0][0])
+
+    def test_pardon_non_admin_rejected(self):
+        update = _make_update(NON_ADMIN_ID)
+        ctx = _make_context("Steve")
+
+        with patch.object(bot, "_rcon_command", new=AsyncMock()) as mock_rcon:
+            run(bot.cmd_pardon(update, ctx))
+
+        mock_rcon.assert_not_called()
+        update.message.reply_text.assert_called_once_with("⛔ Not authorised.")
 
     # -- /whitelist --
 
