@@ -67,6 +67,9 @@ def _parse_admin_ids(raw: str) -> list[int]:
 
 ADMIN_USER_IDS: list[int] = _parse_admin_ids(os.environ.get("ADMIN_USER_IDS", ""))
 
+if not ADMIN_USER_IDS:
+    logger.warning("ADMIN_USER_IDS is empty — all admin commands are disabled")
+
 # ---------------------------------------------------------------------------
 # Wipe confirmation state
 # ---------------------------------------------------------------------------
@@ -90,7 +93,7 @@ def require_admin(func):
 
 async def _rcon_command(host: str, port: int, password: str, cmd: str) -> str:
     def _sync() -> str:
-        with MCRcon(host, port, password) as mcr:
+        with MCRcon(host, password, port) as mcr:
             return mcr.command(cmd)
     return await asyncio.to_thread(_sync)
 
@@ -237,89 +240,31 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
 
-@require_admin
-async def cmd_op(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not context.args:
-        await update.message.reply_text("Usage: /op <player>")
-        return
-    player = context.args[0]
-    user = update.effective_user
-    try:
-        result = await _rcon_command(RCON_HOST, RCON_PORT, RCON_PASSWORD, f"op {player}")
-    except Exception as exc:
-        await update.message.reply_text(f"❌ RCON error: {exc}")
-        return
-    logger.info("ADMIN cmd user_id=%d user=%s rcon=%r result=%r", user.id, user.username, f"op {player}", result)
-    await update.message.reply_text(f"✅ `op {player}`: {result or 'done'}", parse_mode=ParseMode.MARKDOWN)
-    await _notify(context.bot, f"🔧 {user.username or user.id} ran: op {player}")
+def _make_player_cmd_handler(verb: str):
+    @require_admin
+    async def _handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not context.args:
+            await update.message.reply_text(f"Usage: /{verb} <player>")
+            return
+        player = context.args[0]
+        user = update.effective_user
+        rcon_cmd = f"{verb} {player}"
+        try:
+            result = await _rcon_command(RCON_HOST, RCON_PORT, RCON_PASSWORD, rcon_cmd)
+        except Exception as exc:
+            await update.message.reply_text(f"❌ RCON error: {exc}")
+            return
+        logger.info("ADMIN cmd user_id=%d user=%s rcon=%r result=%r", user.id, user.username, rcon_cmd, result)
+        await update.message.reply_text(f"✅ `{rcon_cmd}`: {result or 'done'}", parse_mode=ParseMode.MARKDOWN)
+        await _notify(context.bot, f"🔧 {user.username or user.id} ran: {rcon_cmd}")
+    return _handler
 
 
-@require_admin
-async def cmd_deop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not context.args:
-        await update.message.reply_text("Usage: /deop <player>")
-        return
-    player = context.args[0]
-    user = update.effective_user
-    try:
-        result = await _rcon_command(RCON_HOST, RCON_PORT, RCON_PASSWORD, f"deop {player}")
-    except Exception as exc:
-        await update.message.reply_text(f"❌ RCON error: {exc}")
-        return
-    logger.info("ADMIN cmd user_id=%d user=%s rcon=%r result=%r", user.id, user.username, f"deop {player}", result)
-    await update.message.reply_text(f"✅ `deop {player}`: {result or 'done'}", parse_mode=ParseMode.MARKDOWN)
-    await _notify(context.bot, f"🔧 {user.username or user.id} ran: deop {player}")
-
-
-@require_admin
-async def cmd_kick(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not context.args:
-        await update.message.reply_text("Usage: /kick <player>")
-        return
-    player = context.args[0]
-    user = update.effective_user
-    try:
-        result = await _rcon_command(RCON_HOST, RCON_PORT, RCON_PASSWORD, f"kick {player}")
-    except Exception as exc:
-        await update.message.reply_text(f"❌ RCON error: {exc}")
-        return
-    logger.info("ADMIN cmd user_id=%d user=%s rcon=%r result=%r", user.id, user.username, f"kick {player}", result)
-    await update.message.reply_text(f"✅ `kick {player}`: {result or 'done'}", parse_mode=ParseMode.MARKDOWN)
-    await _notify(context.bot, f"🔧 {user.username or user.id} ran: kick {player}")
-
-
-@require_admin
-async def cmd_ban(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not context.args:
-        await update.message.reply_text("Usage: /ban <player>")
-        return
-    player = context.args[0]
-    user = update.effective_user
-    try:
-        result = await _rcon_command(RCON_HOST, RCON_PORT, RCON_PASSWORD, f"ban {player}")
-    except Exception as exc:
-        await update.message.reply_text(f"❌ RCON error: {exc}")
-        return
-    logger.info("ADMIN cmd user_id=%d user=%s rcon=%r result=%r", user.id, user.username, f"ban {player}", result)
-    await update.message.reply_text(f"✅ `ban {player}`: {result or 'done'}", parse_mode=ParseMode.MARKDOWN)
-    await _notify(context.bot, f"🔧 {user.username or user.id} ran: ban {player}")
-
-
-@require_admin
-async def cmd_pardon(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not context.args:
-        await update.message.reply_text("Usage: /pardon <player>")
-        return
-    player = context.args[0]
-    user = update.effective_user
-    try:
-        result = await _rcon_command(RCON_HOST, RCON_PORT, RCON_PASSWORD, f"pardon {player}")
-    except Exception as exc:
-        await update.message.reply_text(f"❌ RCON error: {exc}")
-        return
-    logger.info("ADMIN cmd user_id=%d user=%s rcon=%r result=%r", user.id, user.username, f"pardon {player}", result)
-    await update.message.reply_text(f"✅ `pardon {player}`: {result or 'done'}", parse_mode=ParseMode.MARKDOWN)
-    await _notify(context.bot, f"🔧 {user.username or user.id} ran: pardon {player}")
+cmd_op = _make_player_cmd_handler("op")
+cmd_deop = _make_player_cmd_handler("deop")
+cmd_kick = _make_player_cmd_handler("kick")
+cmd_ban = _make_player_cmd_handler("ban")
+cmd_pardon = _make_player_cmd_handler("pardon")
 
 
 @require_admin
@@ -393,7 +338,7 @@ async def cmd_backup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     await update.message.reply_text("💾 Starting backup, please wait…")
 
     try:
-        result = await asyncio.get_event_loop().run_in_executor(
+        result = await asyncio.get_running_loop().run_in_executor(
             None,
             lambda: subprocess.run(
                 [BACKUP_SCRIPT],
@@ -503,7 +448,7 @@ async def cmd_wipe(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text("🗑️ Wipe confirmed — starting wipe script…")
 
     try:
-        result = await asyncio.get_event_loop().run_in_executor(
+        result = await asyncio.get_running_loop().run_in_executor(
             None,
             lambda: subprocess.run(
                 [WIPE_SCRIPT],
@@ -596,7 +541,7 @@ async def post_init(application) -> None:
     await _notify(application.bot, "🤖 Minecraft bot started and monitoring server.")
 
     # Launch the health poller as a background task
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     task = loop.create_task(health_poll_loop(application.bot))
     application.bot_data["poll_task"] = task
     logger.info("Health poll task scheduled")
