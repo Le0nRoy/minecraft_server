@@ -8,6 +8,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 
 class AuthSidecarClient {
@@ -25,7 +26,7 @@ class AuthSidecarClient {
     }
 
     JsonObject checkIp(String ip) throws IOException {
-        URL url = new URL(baseUrl + "/auth?ip=" + ip);
+        URL url = new URL(baseUrl + "/auth?ip=" + URLEncoder.encode(ip, StandardCharsets.UTF_8));
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setConnectTimeout(timeoutMs);
         conn.setReadTimeout(timeoutMs);
