@@ -13,7 +13,7 @@ ping-passthrough = "mods"
 enable-player-address-logging = true
 
 [servers]
-minecraft = "minecraft:25566"
+minecraft = "minecraft:${VELOCITY_MINECRAFT_PORT}"
 
 try = [
     "minecraft"

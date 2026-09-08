@@ -11,6 +11,7 @@ services:
       REPLACE_ENV_VARIABLES: "true"
       REPLACE_ENV_VARIABLE_PREFIX: "VELOCITY_"
       VELOCITY_FORWARDING_SECRET: "${VELOCITY_FORWARDING_SECRET}"
+      VELOCITY_MINECRAFT_PORT: "${NEOFORGE_PORT:-25566}"
       AUTH_SIDECAR_URL: "${AUTH_SIDECAR_URL:-http://host.docker.internal:8181}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
