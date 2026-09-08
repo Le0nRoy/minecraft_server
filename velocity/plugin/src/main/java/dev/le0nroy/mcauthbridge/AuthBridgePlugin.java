@@ -31,7 +31,7 @@ public class AuthBridgePlugin {
     private final ProxyServer proxy;
     private final Logger logger;
     private final AuthSidecarClient sidecarClient;
-    private final ConcurrentHashMap<String, JsonObject> pendingIdentities = new ConcurrentHashMap<>();
+    final ConcurrentHashMap<String, JsonObject> pendingIdentities = new ConcurrentHashMap<>();
 
     @Inject
     public AuthBridgePlugin(ProxyServer proxy, Logger logger) {
@@ -43,39 +43,51 @@ public class AuthBridgePlugin {
         logger.info("mc-auth-bridge loaded, sidecar={}", url);
     }
 
+    // Package-private for testing — accepts pre-built client, still registers events.
+    AuthBridgePlugin(ProxyServer proxy, Logger logger, AuthSidecarClient client) {
+        this.proxy = proxy;
+        this.logger = logger;
+        this.sidecarClient = client;
+        proxy.getEventManager().register(this, this);
+    }
+
     @Subscribe
     public EventTask onPreLogin(PreLoginEvent event) {
         return EventTask.async(() -> {
             String username = event.getUsername();
             String ip = event.getConnection().getRemoteAddress().getAddress().getHostAddress();
-            logger.info("PreLogin username={} ip={}", username, ip);
-
-            JsonObject response;
-            try {
-                response = sidecarClient.checkIp(ip);
-            } catch (IOException e) {
-                logger.error("Auth sidecar unreachable for ip={}: {}", ip, e.getMessage());
-                event.setResult(PreLoginEvent.PreLoginComponentResult.denied(
-                    Component.text("Auth check failed — access denied")
-                ));
-                return;
-            }
-
-            boolean allowed = response.has("allowed") && response.get("allowed").getAsBoolean();
-            if (!allowed) {
-                String reason = response.has("reason") ? response.get("reason").getAsString() : "denied";
-                logger.warn("Access denied username={} ip={} reason={}", username, ip, reason);
-                event.setResult(PreLoginEvent.PreLoginComponentResult.denied(
-                    Component.text("Access denied: " + reason)
-                ));
-                return;
-            }
-
-            JsonObject identity = response.has("identity") ? response.getAsJsonObject("identity") : new JsonObject();
-            pendingIdentities.put(username, identity);
-            logger.info("Access allowed username={} ip={}", username, ip);
-            event.setResult(PreLoginEvent.PreLoginComponentResult.forceOfflineMode());
+            processPreLogin(username, ip, event);
         });
+    }
+
+    void processPreLogin(String username, String ip, PreLoginEvent event) {
+        logger.info("PreLogin username={} ip={}", username, ip);
+
+        JsonObject response;
+        try {
+            response = sidecarClient.checkIp(ip);
+        } catch (IOException e) {
+            logger.error("Auth sidecar unreachable for ip={}: {}", ip, e.getMessage());
+            event.setResult(PreLoginEvent.PreLoginComponentResult.denied(
+                Component.text("Auth check failed — access denied")
+            ));
+            return;
+        }
+
+        boolean allowed = response.has("allowed") && response.get("allowed").getAsBoolean();
+        if (!allowed) {
+            String reason = response.has("reason") ? response.get("reason").getAsString() : "denied";
+            logger.warn("Access denied username={} ip={} reason={}", username, ip, reason);
+            event.setResult(PreLoginEvent.PreLoginComponentResult.denied(
+                Component.text("Access denied: " + reason)
+            ));
+            return;
+        }
+
+        JsonObject identity = response.has("identity") ? response.getAsJsonObject("identity") : new JsonObject();
+        pendingIdentities.put(username, identity);
+        logger.info("Access allowed username={} ip={}", username, ip);
+        event.setResult(PreLoginEvent.PreLoginComponentResult.forceOfflineMode());
     }
 
     @Subscribe
