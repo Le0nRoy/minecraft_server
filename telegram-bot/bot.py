@@ -168,7 +168,7 @@ async def fetch_health(session: aiohttp.ClientSession) -> dict | None:
 def _format_status(data: dict) -> str:
     """Format a health response into a human-readable message."""
     status = data.get("status", "unknown")
-    icon = "✅" if status == "healthy" else "❌"
+    icon = "✅" if status == "online" else "❌"
 
     lines = [f"{icon} *Server status:* `{status}`"]
 
@@ -505,7 +505,7 @@ async def health_poll_loop(bot: Bot) -> None:
     async with aiohttp.ClientSession() as session:
         while True:
             data = await fetch_health(session)
-            is_online = data is not None and data.get("status") == "healthy"
+            is_online = data is not None and data.get("status") == "online"
 
             transition = state.transition(is_online)
 

@@ -671,5 +671,92 @@ class TestCmdWipe(unittest.TestCase):
             bot.ADMIN_USER_IDS = self._orig_admins2
 
 
+# ---------------------------------------------------------------------------
+# _format_status
+# ---------------------------------------------------------------------------
+
+
+class TestFormatStatus(unittest.TestCase):
+    def test_online_shows_checkmark(self):
+        msg = bot._format_status({"status": "online"})
+        self.assertTrue(msg.startswith("✅"), f"Expected ✅ prefix, got: {msg!r}")
+
+    def test_offline_shows_cross(self):
+        msg = bot._format_status({"status": "offline"})
+        self.assertTrue(msg.startswith("❌"), f"Expected ❌ prefix, got: {msg!r}")
+
+    def test_starting_shows_cross(self):
+        msg = bot._format_status({"status": "starting"})
+        self.assertTrue(msg.startswith("❌"), f"Expected ❌ prefix, got: {msg!r}")
+
+    def test_unknown_shows_cross(self):
+        msg = bot._format_status({})
+        self.assertTrue(msg.startswith("❌"), f"Expected ❌ prefix, got: {msg!r}")
+
+
+# ---------------------------------------------------------------------------
+# health_poll_loop — ServerState transition logic
+# ---------------------------------------------------------------------------
+
+
+class TestHealthPollLoop(unittest.IsolatedAsyncioTestCase):
+    async def _run_loop_iterations(self, fetch_side_effect):
+        """Run health_poll_loop for N iterations via side_effect list, return notify calls."""
+        mock_bot = MagicMock()
+        notify_calls = []
+
+        # Append a sentinel CancelledError so the loop stops after exhausting the list
+        fetch_responses = list(fetch_side_effect) + [asyncio.CancelledError()]
+
+        call_idx = [0]
+
+        async def fake_fetch(session):
+            resp = fetch_responses[call_idx[0]]
+            call_idx[0] += 1
+            if isinstance(resp, type) and issubclass(resp, BaseException):
+                raise resp()
+            if isinstance(resp, BaseException):
+                raise resp
+            return resp
+
+        async def fake_notify(b, msg):
+            notify_calls.append(msg)
+
+        with patch.object(bot, "fetch_health", new=fake_fetch), \
+             patch.object(bot, "_notify", new=fake_notify), \
+             patch.object(bot, "POLL_INTERVAL", 0):
+            try:
+                await bot.health_poll_loop(mock_bot)
+            except asyncio.CancelledError:
+                pass
+
+        return notify_calls
+
+    async def test_offline_then_online_triggers_online_notify(self):
+        # ServerState skips notification on first poll (UNKNOWN state); must go offline→online
+        notify_calls = await self._run_loop_iterations([
+            {"status": "offline"},   # poll 1: UNKNOWN→OFFLINE, no notify
+            {"status": "online"},    # poll 2: OFFLINE→ONLINE, fires "online" notify
+        ])
+        online_msgs = [m for m in notify_calls if "online" in m.lower()]
+        self.assertTrue(online_msgs, f"Expected an 'online' notification, got: {notify_calls}")
+
+    async def test_offline_status_does_not_trigger_online_notify(self):
+        notify_calls = await self._run_loop_iterations([
+            {"status": "offline"},   # poll 1: UNKNOWN→OFFLINE, no notify
+            {"status": "offline"},   # poll 2: no change, no notify
+        ])
+        for msg in notify_calls:
+            self.assertNotIn("online", msg.lower(), f"Unexpected online notify: {msg!r}")
+
+    async def test_none_fetch_does_not_trigger_online_notify(self):
+        notify_calls = await self._run_loop_iterations([
+            None,   # poll 1: fetch failed, no notify
+            None,   # poll 2: still failed, no notify
+        ])
+        for msg in notify_calls:
+            self.assertNotIn("online", msg.lower(), f"Unexpected online notify: {msg!r}")
+
+
 if __name__ == "__main__":
     unittest.main()
