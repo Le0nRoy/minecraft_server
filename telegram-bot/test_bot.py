@@ -733,6 +733,14 @@ class TestFormatStatus(unittest.TestCase):
         result = bot._format_status({"status": "online"})
         self.assertIn("0/0", result)
 
+    def test_online_status_shows_check_icon(self):
+        result = bot._format_status({"status": "online"})
+        self.assertIn("✅", result)
+
+    def test_non_online_status_shows_cross_icon(self):
+        result = bot._format_status({"status": "offline"})
+        self.assertIn("❌", result)
+
 
 # ---------------------------------------------------------------------------
 # health_poll_loop — ServerState transition logic
