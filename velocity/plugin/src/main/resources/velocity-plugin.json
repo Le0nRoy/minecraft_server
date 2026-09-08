@@ -1,0 +1,9 @@
+{
+  "id": "mc-auth-bridge",
+  "name": "MC Auth Bridge",
+  "version": "1.0.0",
+  "description": "Velocity plugin that gates logins via the auth identity sidecar",
+  "authors": ["le0nroy"],
+  "main": "dev.le0nroy.mcauthbridge.AuthBridgePlugin",
+  "dependencies": []
+}
