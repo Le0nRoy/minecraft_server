@@ -33,6 +33,7 @@ tasks.withType<JavaCompile> {
 
 tasks.shadowJar {
     archiveClassifier.set("")
+    archiveFileName.set("mc-auth-bridge.jar")
 }
 
 tasks.test {
