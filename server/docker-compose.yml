@@ -1,10 +1,29 @@
 version: "3.8"
 
 services:
+  velocity:
+    build:
+      context: ../velocity
+    ports:
+      - "${SERVER_PORT:-25565}:25565"
+    environment:
+      JVM_OPTS: "-Dvelocity.max-known-packs=256"
+      REPLACE_ENV_VARIABLES: "true"
+      REPLACE_ENV_VARIABLE_PREFIX: "VELOCITY_"
+      VELOCITY_FORWARDING_SECRET: "${VELOCITY_FORWARDING_SECRET}"
+      VELOCITY_MINECRAFT_PORT: "${NEOFORGE_PORT:-25566}"
+      AUTH_SIDECAR_URL: "${AUTH_SIDECAR_URL:-http://host.docker.internal:8181}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - minecraft
+    networks:
+      - minecraft
+    restart: unless-stopped
+
   minecraft:
     image: itzg/minecraft-server:latest
     ports:
-      - "${SERVER_PORT}:25565"
       - "${RCON_PORT}:25575"
     env_file:
       - ../.env
@@ -31,6 +50,10 @@ services:
       SYNC_SKIP_NEWER_IN_DESTINATION: "false"
       OVERRIDE_SERVER_PROPERTIES: "false"
       PACKWIZ_URL: "file:///packwiz/pack.toml"
+      SERVER_PORT: "${NEOFORGE_PORT:-25566}"
+      REPLACE_ENV_VARIABLES: "true"
+      REPLACE_ENV_VARIABLE_PREFIX: "VELOCITY_"
+      VELOCITY_FORWARDING_SECRET: "${VELOCITY_FORWARDING_SECRET}"
       # Hardcoded — intentionally not overridable via .env.
       # Network access is restricted to Tailscale; Mojang auth is disabled.
       ONLINE_MODE: "false"

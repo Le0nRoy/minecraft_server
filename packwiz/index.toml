@@ -151,6 +151,11 @@ hash = "03c2188c7c5aa4407964fd3bb20074b52eb2adf8897c3a22897cc037446450ce"
 metafile = true
 
 [[files]]
+file = "mods/proxy-compatible-forge.pw.toml"
+hash = "41234568958f326c8312a33aa7a7ceb2c5ed5914a9caa87b1c829151d6369a38"
+metafile = true
+
+[[files]]
 file = "mods/rei.pw.toml"
 hash = "21388a8519fbba93d4663a40bb163932855213ec47f41af18c1d3a4a1e2ada93"
 metafile = true
