@@ -14,9 +14,10 @@ server/crash-reports/
 # Temporary world export used by scripts/backup.sh
 .backup-tmp/
 
-# Java artifacts (exclude packwiz directory)
+# Java artifacts (exclude packwiz directory and Gradle wrapper)
 *.jar
 !packwiz/**/*.jar
+!velocity/plugin/gradle/wrapper/gradle-wrapper.jar
 
 # Python
 __pycache__/
