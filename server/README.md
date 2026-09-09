@@ -1,6 +1,6 @@
 # Server
 
-Docker Compose stack for the Minecraft Fabric 1.20.1 server.
+Docker Compose stack for the Minecraft NeoForge 1.21.1 server.
 
 ## Prerequisites
 
@@ -42,4 +42,26 @@ docker compose down
 - `config/ops.json` — server operators list
 - `config/whitelist.json` — whitelist (enable with `white-list=true` in server.properties)
 - `config/banned-players.json` / `config/banned-ips.json` — ban lists
-- `config/fabric/fabric-server-launch.properties` — Fabric launcher config
+
+## Offline mode (no Microsoft account required)
+
+The server runs with `ONLINE_MODE=false` and `ENFORCE_SECURE_PROFILE=false`, so players
+do not need a Mojang/Microsoft account to connect.
+
+**Client setup:** use the installer scripts in `scripts/` to set up PolyMC, which
+supports offline accounts natively:
+
+```
+scripts/install-client-linux.sh    # Linux
+scripts/install-client-macos.sh    # macOS
+scripts/install-client-windows.ps1 # Windows
+```
+
+**Connecting:**
+
+1. Open PolyMC → **Accounts** (top-right) → **Add Offline** → enter any username.
+2. Launch the `Minecraft Infra Pack 1.21.1 (NeoForge)` instance.
+3. In-game: **Multiplayer** → **Add Server** → enter the server address → **Join Server**.
+
+> **Note:** Because online mode is disabled, any username can join. Access is restricted
+> at the network level (Tailscale / local network) rather than by Mojang authentication.

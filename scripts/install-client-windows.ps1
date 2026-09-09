@@ -1,16 +1,16 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Install the Minecraft Infra Pack modpack on Windows via Prism Launcher.
+    Install the Minecraft Infra Pack modpack on Windows via PolyMC.
 
 .DESCRIPTION
     This script:
-      - Verifies (or installs) Prism Launcher
+      - Verifies (or installs) PolyMC
       - Verifies (or installs) Java 21+
-      - Locates Prism Launcher's real "instances" directory and creates the
+      - Locates PolyMC's real "instances" directory and creates the
         NeoForge 1.21.1 instance directly inside it - no manual folder
         picking or copying required
-      - Falls back to a folder picker only if Prism's instances directory
+      - Falls back to a folder picker only if PolyMC's instances directory
         cannot be determined automatically
       - Shows a completion dialog with next steps
 
@@ -36,8 +36,8 @@ $LwjglVersion        = "3.3.3"
 $BootstrapUrl        = "https://github.com/packwiz/packwiz-installer-bootstrap/releases/latest/download/packwiz-installer-bootstrap.jar"
 $PackwizPackUrl      = "https://raw.githubusercontent.com/Le0nRoy/minecraft_server/main/packwiz/pack.toml"
 $UninstallPs1Url     = "https://raw.githubusercontent.com/Le0nRoy/minecraft_server/main/scripts/uninstall-infra-modpack.ps1"
-$PrismDownloadUrl    = "https://prismlauncher.org/download/windows"
-$PrismReleasesApiUrl = "https://api.github.com/repos/PrismLauncher/PrismLauncher/releases/latest"
+$PolymcDownloadUrl   = "https://polymc.org/download/windows"
+$PolymcReleasesApiUrl = "https://api.github.com/repos/PolyMC/PolyMC/releases/latest"
 $AdoptiumApiUrl      = "https://api.adoptium.net/v3/assets/feature_releases/21/ga?image_type=jdk&os=windows&architecture=x64&vendor=eclipse&page_size=1"
 $JavaDownloadPageUrl = "https://adoptium.net/temurin/releases/?version=21"
 
@@ -79,13 +79,13 @@ function Write-Fail {
 }
 
 # ---------------------------------------------------------------------------
-# Step 1 - Locate or install Prism Launcher
+# Step 1 - Locate or install PolyMC
 # ---------------------------------------------------------------------------
 
-function Find-PrismLauncher {
+function Find-PolyMC {
     $candidates = @(
-        (Join-Path $env:LOCALAPPDATA "Programs\PrismLauncher\prismlauncher.exe"),
-        (Join-Path $env:PROGRAMFILES "PrismLauncher\prismlauncher.exe")
+        (Join-Path $env:LOCALAPPDATA "Programs\PolyMC\polymc.exe"),
+        (Join-Path $env:PROGRAMFILES "PolyMC\polymc.exe")
     )
 
     foreach ($path in $candidates) {
@@ -97,20 +97,15 @@ function Find-PrismLauncher {
     return $null
 }
 
-function Get-LatestPrismInstallerUrl {
-    # PrismLauncher's release asset filenames carry the version number and a
-    # toolchain suffix (e.g. PrismLauncher-Windows-MSVC-Setup-11.0.3.exe), so
-    # a hardcoded "latest/download/PrismLauncher-Windows-Setup.exe" URL goes
-    # stale and 404s every time they cut a new release under a new name -
-    # exactly what happened here. Resolve it from the GitHub API instead,
-    # the same way Get-LatestTemurinInstallerUrl already does for Java.
+function Get-LatestPolymcInstallerUrl {
+    # Resolve installer URL from GitHub API so it stays current across releases.
     try {
-        $release = Invoke-RestMethod -Uri $PrismReleasesApiUrl -UseBasicParsing
+        $release = Invoke-RestMethod -Uri $PolymcReleasesApiUrl -UseBasicParsing
         $isArm = $env:PROCESSOR_ARCHITECTURE -eq "ARM64" -or $env:PROCESSOR_ARCHITEW6432 -eq "ARM64"
         $pattern = if ($isArm) {
-            '^PrismLauncher-Windows-MSVC-arm64-Setup-.*\.exe$'
+            '^PolyMC-Windows-.*-arm64-Setup.*\.exe$'
         } else {
-            '^PrismLauncher-Windows-MSVC-Setup-.*\.exe$'
+            '^PolyMC-Windows-.*-Setup.*\.exe$'
         }
         $asset = $release.assets | Where-Object { $_.name -match $pattern } | Select-Object -First 1
         if ($asset) {
@@ -122,52 +117,52 @@ function Get-LatestPrismInstallerUrl {
     }
 }
 
-function Install-PrismLauncher {
+function Install-PolyMC {
     $answer = Show-MessageBox `
-        -Message "Prism Launcher does not appear to be installed on this machine.`n`nWould you like to download and install it automatically?`n`n(Clicking 'No' will open the download page in your browser instead, so you can choose your own install location.)" `
-        -Title "Prism Launcher Not Found" `
+        -Message "PolyMC does not appear to be installed on this machine.`n`nPolyMC supports offline play (no Microsoft account required).`n`nWould you like to download and install it automatically?`n`n(Clicking 'No' will open the download page in your browser instead.)" `
+        -Title "PolyMC Not Found" `
         -Buttons YesNo `
         -Icon Question
 
     if ($answer -eq [System.Windows.Forms.DialogResult]::Yes) {
-        Write-Step "Looking up the latest Prism Launcher installer..."
-        $installerUrl = Get-LatestPrismInstallerUrl
+        Write-Step "Looking up the latest PolyMC installer..."
+        $installerUrl = Get-LatestPolymcInstallerUrl
         if (-not $installerUrl) {
-            Write-Warn "Could not resolve the latest Prism Launcher installer URL automatically."
+            Write-Warn "Could not resolve the latest PolyMC installer URL automatically."
             Show-MessageBox `
-                -Message "Could not determine the latest Prism Launcher installer automatically.`n`nOpening the manual download page instead." `
-                -Title "Prism Launcher Auto-Install Failed" `
+                -Message "Could not determine the latest PolyMC installer automatically.`n`nOpening the manual download page instead." `
+                -Title "PolyMC Auto-Install Failed" `
                 -Icon Warning
-            Start-Process $PrismDownloadUrl
+            Start-Process $PolymcDownloadUrl
             exit 1
         }
 
-        Write-Step "Downloading Prism Launcher installer..."
-        $installerPath = Join-Path $env:TEMP "PrismLauncher-Setup.exe"
+        Write-Step "Downloading PolyMC installer..."
+        $installerPath = Join-Path $env:TEMP "PolyMC-Setup.exe"
 
         try {
             $webClient = New-Object System.Net.WebClient
             $webClient.DownloadFile($installerUrl, $installerPath)
-            Write-OK "Downloaded Prism Launcher installer."
+            Write-OK "Downloaded PolyMC installer."
         } catch {
             Show-MessageBox `
-                -Message "Failed to download Prism Launcher:`n$_`n`nPlease download it manually from:`n$PrismDownloadUrl" `
+                -Message "Failed to download PolyMC:`n$_`n`nPlease download it manually from:`n$PolymcDownloadUrl" `
                 -Title "Download Failed" `
                 -Icon Error
-            Start-Process $PrismDownloadUrl
+            Start-Process $PolymcDownloadUrl
             exit 1
         }
 
-        Write-Step "Running Prism Launcher installer silently..."
+        Write-Step "Running PolyMC installer silently..."
         try {
             $proc = Start-Process -FilePath $installerPath -ArgumentList "/S" -PassThru -Wait
             if ($proc.ExitCode -ne 0) {
                 throw "Installer exited with code $($proc.ExitCode)"
             }
-            Write-OK "Prism Launcher installed successfully."
+            Write-OK "PolyMC installed successfully."
         } catch {
             Show-MessageBox `
-                -Message "Prism Launcher installation failed:`n$_`n`nPlease install it manually from:`n$PrismDownloadUrl" `
+                -Message "PolyMC installation failed:`n$_`n`nPlease install it manually from:`n$PolymcDownloadUrl" `
                 -Title "Installation Failed" `
                 -Icon Error
             exit 1
@@ -177,46 +172,46 @@ function Install-PrismLauncher {
         Remove-Item -Force -ErrorAction SilentlyContinue $installerPath
 
     } else {
-        Start-Process $PrismDownloadUrl
+        Start-Process $PolymcDownloadUrl
         Show-MessageBox `
-            -Message "Please install Prism Launcher (pick whatever location you like), then re-run this script - it will find it automatically." `
+            -Message "Please install PolyMC (pick whatever location you like), then re-run this script - it will find it automatically." `
             -Title "Manual Installation Required" `
             -Icon Information
         exit 0
     }
 
     # Re-check after installation
-    $prismExe = Find-PrismLauncher
-    if (-not $prismExe) {
+    $polymcExe = Find-PolyMC
+    if (-not $polymcExe) {
         Show-MessageBox `
-            -Message "Could not locate Prism Launcher after installation.`nPlease launch it once manually, then re-run this script." `
-            -Title "Prism Launcher Not Found" `
+            -Message "Could not locate PolyMC after installation.`nPlease launch it once manually, then re-run this script." `
+            -Title "PolyMC Not Found" `
             -Icon Warning
         exit 1
     }
 
-    return $prismExe
+    return $polymcExe
 }
 
 # ---------------------------------------------------------------------------
-# Step 2 - Locate Prism Launcher's real "instances" directory
+# Step 2 - Locate PolyMC's real "instances" directory
 # ---------------------------------------------------------------------------
 
-function Get-PrismInstancesDir {
-    param([string]$PrismExePath)
+function Get-PolymcInstancesDir {
+    param([string]$PolymcExePath)
 
-    $prismExeDir = Split-Path -Parent $PrismExePath
+    $polymcExeDir = Split-Path -Parent $PolymcExePath
 
     # Portable installs keep their data (including instances/) right next to
-    # the executable, marked by a prismlauncher.cfg file there.
-    if (Test-Path (Join-Path $prismExeDir "prismlauncher.cfg")) {
-        $portableInstances = Join-Path $prismExeDir "instances"
+    # the executable, marked by a polymc.cfg file there.
+    if (Test-Path (Join-Path $polymcExeDir "polymc.cfg")) {
+        $portableInstances = Join-Path $polymcExeDir "instances"
         New-Item -ItemType Directory -Force -Path $portableInstances | Out-Null
         return $portableInstances
     }
 
-    # Installed (non-portable) Prism keeps user data under %APPDATA%.
-    $installedInstances = Join-Path $env:APPDATA "PrismLauncher\instances"
+    # Installed (non-portable) PolyMC keeps user data under %APPDATA%.
+    $installedInstances = Join-Path $env:APPDATA "PolyMC\instances"
     New-Item -ItemType Directory -Force -Path $installedInstances | Out-Null
     return $installedInstances
 }
@@ -398,7 +393,7 @@ function Confirm-JavaVersion {
 
             if ($needsInstall) {
                 Write-OK "Java 21 is already installed ($($registered.DisplayName)); skipping installer to avoid re-running the MSI over an existing install (which fails with error 1603)."
-                Write-Warn "It's not resolvable as 'java' in this window though. Restart Windows (or at least log out/in) so the PATH change takes effect everywhere, or in Prism Launcher use the Java settings page's Auto-detect button and point it at:`n$($registered.InstallLocation)bin\javaw.exe"
+                Write-Warn "It's not resolvable as 'java' in this window though. Restart Windows (or at least log out/in) so the PATH change takes effect everywhere, or in PolyMC use the Java settings page's Auto-detect button and point it at:`n$($registered.InstallLocation)bin\javaw.exe"
                 return
             }
         }
@@ -428,7 +423,7 @@ function Confirm-JavaVersion {
     if ($answer -eq [System.Windows.Forms.DialogResult]::Yes) {
         $installed = Install-Java
         if ($installed) {
-            Write-Warn "Java 21 was installed. If Prism Launcher doesn't pick it up automatically, use its Java settings page to Auto-detect."
+            Write-Warn "Java 21 was installed. If PolyMC doesn't pick it up automatically, use its Java settings page to Auto-detect."
         }
     } else {
         Start-Process $JavaDownloadPageUrl
@@ -459,7 +454,7 @@ function Get-PackwizBootstrap {
 }
 
 # ---------------------------------------------------------------------------
-# Step 5 - Create the Prism Launcher instance
+# Step 5 - Create the PolyMC instance
 # ---------------------------------------------------------------------------
 
 function Write-UninstallScripts {
@@ -491,7 +486,7 @@ exit /b
     Set-Content -Path (Join-Path $TargetInstancesDir "uninstall-infra-modpack.bat") -Value $uninstallBat -Encoding ASCII
 }
 
-function New-PrismInstance {
+function New-PolymcInstance {
     param([string]$BaseDir)
 
     $instanceDir = Join-Path $BaseDir $InstanceDirName
@@ -548,7 +543,7 @@ name=$PackName
     Set-Content -Path (Join-Path $instanceDir "mmc-pack.json") -Value $mmcPack -Encoding UTF8
 
     # --- packwiz-installer-bootstrap.jar ---
-    # Must live inside .minecraft: Prism runs PreLaunchCommand with the
+    # Must live inside .minecraft: PolyMC runs PreLaunchCommand with the
     # instance's .minecraft directory as its working directory, and the
     # command above references the jar by relative path.
     Write-Step "Downloading packwiz-installer-bootstrap.jar into instance..."
@@ -560,13 +555,13 @@ name=$PackName
 }
 
 # ---------------------------------------------------------------------------
-# Fallback - manual folder picker (only used if Prism's instances dir can't
+# Fallback - manual folder picker (only used if PolyMC's instances dir can't
 # be determined, which shouldn't normally happen)
 # ---------------------------------------------------------------------------
 
 function Get-FallbackInstallDirectory {
     Show-MessageBox `
-        -Message "Could not automatically determine Prism Launcher's instances folder.`n`nYou'll be asked to pick a folder instead - copy it into Prism's 'instances' directory yourself afterward." `
+        -Message "Could not automatically determine PolyMC's instances folder.`n`nYou'll be asked to pick a folder instead - copy it into PolyMC's 'instances' directory yourself afterward." `
         -Title "Manual Location Needed" `
         -Icon Warning | Out-Null
 
@@ -595,21 +590,21 @@ function Main {
     Write-Host ""
 
     try {
-        # 1. Prism Launcher
-        Write-Step "Checking for Prism Launcher..."
-        $prismExe = Find-PrismLauncher
-        if (-not $prismExe) {
-            Write-Warn "Prism Launcher not found - prompting for installation."
-            $prismExe = Install-PrismLauncher
+        # 1. PolyMC
+        Write-Step "Checking for PolyMC..."
+        $polymcExe = Find-PolyMC
+        if (-not $polymcExe) {
+            Write-Warn "PolyMC not found - prompting for installation."
+            $polymcExe = Install-PolyMC
         }
-        Write-OK "Prism Launcher found: $prismExe"
+        Write-OK "PolyMC found: $polymcExe"
 
         # 2. Locate its instances directory (falls back to a folder picker
         #    only if this genuinely can't be determined)
-        Write-Step "Locating Prism Launcher's instances directory..."
+        Write-Step "Locating PolyMC's instances directory..."
         $instancesDir = $null
         try {
-            $instancesDir = Get-PrismInstancesDir -PrismExePath $prismExe
+            $instancesDir = Get-PolymcInstancesDir -PolymcExePath $polymcExe
         } catch {
             $instancesDir = $null
         }
@@ -626,14 +621,14 @@ function Main {
         Confirm-JavaVersion
 
         # Always refresh the uninstaller pair, even if the user keeps their
-        # existing instance below (New-PrismInstance can exit early in that
+        # existing instance below (New-PolymcInstance can exit early in that
         # case). Otherwise a stale copy from an older version of this script
         # sits in the instances folder indefinitely and never self-heals.
         Write-Step "Refreshing uninstall scripts..."
         Write-UninstallScripts -TargetInstancesDir $instancesDir
 
-        # 4. Create instance directly inside Prism's instances directory
-        $instanceDir = New-PrismInstance -BaseDir $instancesDir
+        # 4. Create instance directly inside PolyMC's instances directory
+        $instanceDir = New-PolymcInstance -BaseDir $instancesDir
 
         # 5. Done
         Write-Host ""
@@ -643,7 +638,7 @@ function Main {
         Write-Host ""
 
         Show-MessageBox `
-            -Message "Installation complete!`n`nThe instance was created directly inside Prism Launcher's instances folder - no manual copying needed.`n`nNext steps:`n`n1. Open (or restart) Prism Launcher.`n2. Find and select '$PackName'.`n3. Click Launch - packwiz will automatically download all mods on first launch.`n4. Enjoy the server!`n`nInstance location:`n$instanceDir`n`nTo remove the modpack later, run uninstall-infra-modpack.bat, found one level up in the instances folder (not inside this one - that's intentional, so the uninstaller isn't deleting the folder it's running from)." `
+            -Message "Installation complete!`n`nThe instance was created directly inside PolyMC's instances folder - no manual copying needed.`n`nNext steps:`n`n1. Open (or restart) PolyMC.`n2. Add an offline account: Accounts (top-right) → Add Offline → enter any username.`n3. Find and select '$PackName'.`n4. Click Launch - packwiz will automatically download all mods on first launch.`n5. Connect to the server — no Microsoft account required.`n`nInstance location:`n$instanceDir`n`nTo remove the modpack later, run uninstall-infra-modpack.bat, found one level up in the instances folder (not inside this one - that's intentional, so the uninstaller isn't deleting the folder it's running from)." `
             -Title "Installation Complete" `
             -Icon Information | Out-Null
 
@@ -671,7 +666,7 @@ try {
 }
 
 # A fresh install can end up spawning a few child/helper processes along the
-# way (the Prism silent installer, the elevated Java MSI) - if any of them
+# way (the PolyMC silent installer, the elevated Java MSI) - if any of them
 # leave a handle open back to this process, plain end-of-script wouldn't
 # actually terminate powershell.exe, so the .bat wrapper's window is left
 # open even after Read-Host returns. Force it explicitly instead of relying
