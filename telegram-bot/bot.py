@@ -168,7 +168,7 @@ async def fetch_health(session: aiohttp.ClientSession) -> dict | None:
 def _format_status(data: dict) -> str:
     """Format a health response into a human-readable message."""
     status = data.get("status", "unknown")
-    icon = "✅" if status == "online" else "❌"
+    icon = "✅" if status == ServerState.ONLINE else "❌"
 
     lines = [f"{icon} *Server status:* `{status}`"]
 

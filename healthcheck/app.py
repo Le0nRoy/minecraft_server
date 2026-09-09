@@ -53,8 +53,7 @@ _cache_lock = threading.Lock()
 _cached_status: dict = {
     "status": "starting",
     "uptime_seconds": 0,
-    "players_online": 0,
-    "players_max": 20,
+    "players": {"online": 0, "max": 20},
     "version": "unknown",
     "motd": "",
     "timestamp": START_WALL.strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -136,8 +135,7 @@ def _build_status_payload(
     return {
         "status": status,
         "uptime_seconds": uptime,
-        "players_online": players_online,
-        "players_max": players_max,
+        "players": {"online": players_online, "max": players_max},
         "version": "unknown",  # RCON does not expose version; extend via /version if needed
         "motd": "",
         "timestamp": now_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),

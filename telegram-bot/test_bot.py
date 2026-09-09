@@ -672,7 +672,38 @@ class TestCmdWipe(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# _format_status
+# _format_players — verifies bot reads nested players dict correctly
+# ---------------------------------------------------------------------------
+
+
+class TestFormatPlayers(unittest.TestCase):
+    def test_shows_count(self):
+        result = bot._format_players({"players": {"online": 5, "max": 20}})
+        self.assertIn("5/20", result)
+
+    def test_zero_count(self):
+        result = bot._format_players({"players": {"online": 0, "max": 0}})
+        self.assertIn("0/0", result)
+
+    def test_missing_players_key_no_crash(self):
+        result = bot._format_players({})
+        self.assertIn("0/0", result)
+
+    def test_sample_names_listed(self):
+        data = {
+            "players": {
+                "online": 2,
+                "max": 20,
+                "sample": [{"name": "Alice"}, {"name": "Bob"}],
+            }
+        }
+        result = bot._format_players(data)
+        self.assertIn("Alice", result)
+        self.assertIn("Bob", result)
+
+
+# ---------------------------------------------------------------------------
+# _format_status — verifies icon and nested players dict for /status
 # ---------------------------------------------------------------------------
 
 
@@ -692,6 +723,23 @@ class TestFormatStatus(unittest.TestCase):
     def test_unknown_shows_cross(self):
         msg = bot._format_status({})
         self.assertTrue(msg.startswith("❌"), f"Expected ❌ prefix, got: {msg!r}")
+
+    def test_shows_player_count(self):
+        data = {"status": "online", "players": {"online": 3, "max": 20}}
+        result = bot._format_status(data)
+        self.assertIn("3/20", result)
+
+    def test_missing_players_key_shows_zero(self):
+        result = bot._format_status({"status": "online"})
+        self.assertIn("0/0", result)
+
+    def test_online_status_shows_check_icon(self):
+        result = bot._format_status({"status": "online"})
+        self.assertIn("✅", result)
+
+    def test_non_online_status_shows_cross_icon(self):
+        result = bot._format_status({"status": "offline"})
+        self.assertIn("❌", result)
 
 
 # ---------------------------------------------------------------------------
