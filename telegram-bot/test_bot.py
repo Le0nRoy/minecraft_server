@@ -8,6 +8,8 @@ import types
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import aiohttp
+
 
 # ---------------------------------------------------------------------------
 # Minimal stubs so bot.py can be imported without real credentials or mcrcon
@@ -669,6 +671,368 @@ class TestCmdWipe(unittest.TestCase):
             self.assertNotEqual(token1, token2)
         finally:
             bot.ADMIN_USER_IDS = self._orig_admins2
+
+
+# ---------------------------------------------------------------------------
+# ServerState — pure state machine, no mocking required
+# ---------------------------------------------------------------------------
+
+
+class TestServerState(unittest.TestCase):
+    def test_first_poll_online_returns_none(self):
+        s = bot.ServerState()
+        self.assertIsNone(s.transition(True))
+
+    def test_first_poll_offline_returns_none(self):
+        s = bot.ServerState()
+        self.assertIsNone(s.transition(False))
+
+    def test_offline_then_online_returns_online(self):
+        s = bot.ServerState()
+        s.transition(False)
+        self.assertEqual(s.transition(True), "online")
+
+    def test_online_then_offline_returns_crashed(self):
+        s = bot.ServerState()
+        s.transition(True)
+        self.assertEqual(s.transition(False), "crashed")
+
+    def test_no_change_online_returns_none(self):
+        s = bot.ServerState()
+        s.transition(True)
+        self.assertIsNone(s.transition(True))
+
+    def test_no_change_offline_returns_none(self):
+        s = bot.ServerState()
+        s.transition(False)
+        self.assertIsNone(s.transition(False))
+
+    def test_state_attribute_after_online(self):
+        s = bot.ServerState()
+        s.transition(True)
+        self.assertEqual(s.state, bot.ServerState.ONLINE)
+
+    def test_state_attribute_after_offline(self):
+        s = bot.ServerState()
+        s.transition(False)
+        self.assertEqual(s.state, bot.ServerState.OFFLINE)
+
+
+# ---------------------------------------------------------------------------
+# fetch_health — mock aiohttp session context manager
+# ---------------------------------------------------------------------------
+
+
+class TestFetchHealth(unittest.TestCase):
+    def _make_session(self, status, json_data=None):
+        mock_resp = MagicMock()
+        mock_resp.status = status
+        mock_resp.json = AsyncMock(return_value=json_data)
+        mock_cm = MagicMock()
+        mock_cm.__aenter__ = AsyncMock(return_value=mock_resp)
+        mock_cm.__aexit__ = AsyncMock(return_value=False)
+        mock_session = MagicMock()
+        mock_session.get.return_value = mock_cm
+        return mock_session
+
+    def test_http_200_returns_json(self):
+        session = self._make_session(200, {"status": "online"})
+        result = run(bot.fetch_health(session))
+        self.assertEqual(result, {"status": "online"})
+
+    def test_http_503_returns_none(self):
+        session = self._make_session(503)
+        result = run(bot.fetch_health(session))
+        self.assertIsNone(result)
+
+    def test_client_error_returns_none(self):
+        mock_session = MagicMock()
+        mock_session.get.side_effect = aiohttp.ClientError("connection refused")
+        result = run(bot.fetch_health(mock_session))
+        self.assertIsNone(result)
+
+    def test_generic_exception_returns_none(self):
+        mock_session = MagicMock()
+        mock_session.get.side_effect = Exception("unexpected")
+        result = run(bot.fetch_health(mock_session))
+        self.assertIsNone(result)
+
+
+# ---------------------------------------------------------------------------
+# cmd_status — patch fetch_health to avoid real aiohttp session
+# ---------------------------------------------------------------------------
+
+
+class TestCmdStatus(unittest.TestCase):
+    def _run_cmd(self, fetch_return):
+        update = _make_update(ADMIN_ID)
+        ctx = _make_context()
+        with patch.object(bot, "fetch_health", new=AsyncMock(return_value=fetch_return)), \
+             patch("aiohttp.ClientSession") as mock_cls:
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+            run(bot.cmd_status(update, ctx))
+        return update
+
+    def test_success_replies_with_status(self):
+        update = self._run_cmd({"status": "online", "players": {"online": 2, "max": 20}})
+        update.message.reply_text.assert_called_once()
+        self.assertIn("online", update.message.reply_text.call_args[0][0])
+
+    def test_fetch_failure_replies_unreachable(self):
+        update = self._run_cmd(None)
+        update.message.reply_text.assert_called_once()
+        self.assertIn("unreachable", update.message.reply_text.call_args[0][0])
+
+
+# ---------------------------------------------------------------------------
+# cmd_players — patch fetch_health
+# ---------------------------------------------------------------------------
+
+
+class TestCmdPlayers(unittest.TestCase):
+    def _run_cmd(self, fetch_return):
+        update = _make_update(ADMIN_ID)
+        ctx = _make_context()
+        with patch.object(bot, "fetch_health", new=AsyncMock(return_value=fetch_return)), \
+             patch("aiohttp.ClientSession") as mock_cls:
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+            run(bot.cmd_players(update, ctx))
+        return update
+
+    def test_success_replies_with_player_count(self):
+        update = self._run_cmd({"players": {"online": 3, "max": 20}})
+        update.message.reply_text.assert_called_once()
+        self.assertIn("3/20", update.message.reply_text.call_args[0][0])
+
+    def test_fetch_failure_replies_unreachable(self):
+        update = self._run_cmd(None)
+        update.message.reply_text.assert_called_once()
+        self.assertIn("unreachable", update.message.reply_text.call_args[0][0])
+
+
+# ---------------------------------------------------------------------------
+# cmd_backup — patch subprocess.run (run_in_executor calls the patched fn)
+# ---------------------------------------------------------------------------
+
+
+class TestCmdBackup(unittest.TestCase):
+    def _make_ctx(self):
+        ctx = _make_context()
+        ctx.bot.send_message = AsyncMock()
+        return ctx
+
+    def _make_result(self, returncode, stdout="", stderr=""):
+        r = MagicMock()
+        r.returncode = returncode
+        r.stdout = stdout
+        r.stderr = stderr
+        return r
+
+    def test_success_with_filename_in_output(self):
+        update = _make_update(ADMIN_ID)
+        ctx = self._make_ctx()
+        with patch("subprocess.run", return_value=self._make_result(0, "backup /path/to/file.tar.gz")):
+            run(bot.cmd_backup(update, ctx))
+        self.assertEqual(update.message.reply_text.call_count, 2)
+        self.assertIn("file.tar.gz", update.message.reply_text.call_args_list[1][0][0])
+
+    def test_success_without_filename_replies_generic(self):
+        update = _make_update(ADMIN_ID)
+        ctx = self._make_ctx()
+        with patch("subprocess.run", return_value=self._make_result(0, "")):
+            run(bot.cmd_backup(update, ctx))
+        self.assertIn("successfully", update.message.reply_text.call_args_list[1][0][0])
+
+    def test_success_notifies_chat(self):
+        update = _make_update(ADMIN_ID)
+        ctx = self._make_ctx()
+        with patch("subprocess.run", return_value=self._make_result(0, "")):
+            run(bot.cmd_backup(update, ctx))
+        ctx.bot.send_message.assert_called_once()
+        self.assertEqual(ctx.bot.send_message.call_args[1]["chat_id"], bot.CHAT_ID)
+
+    def test_failure_nonzero_exit_replies_error(self):
+        update = _make_update(ADMIN_ID)
+        ctx = self._make_ctx()
+        with patch("subprocess.run", return_value=self._make_result(1, stderr="disk full")):
+            run(bot.cmd_backup(update, ctx))
+        self.assertTrue(update.message.reply_text.call_args_list[-1][0][0].startswith("❌"))
+        ctx.bot.send_message.assert_called_once()
+
+    def test_file_not_found_replies_not_found(self):
+        update = _make_update(ADMIN_ID)
+        ctx = self._make_ctx()
+        with patch("subprocess.run", side_effect=FileNotFoundError("not found")):
+            run(bot.cmd_backup(update, ctx))
+        self.assertIn("not found", update.message.reply_text.call_args_list[-1][0][0].lower())
+        ctx.bot.send_message.assert_not_called()
+
+    def test_timeout_expired_replies_timed_out(self):
+        import subprocess as subprocess_mod
+        update = _make_update(ADMIN_ID)
+        ctx = self._make_ctx()
+        with patch("subprocess.run", side_effect=subprocess_mod.TimeoutExpired(cmd="backup.sh", timeout=300)):
+            run(bot.cmd_backup(update, ctx))
+        self.assertIn("timed out", update.message.reply_text.call_args_list[-1][0][0].lower())
+        ctx.bot.send_message.assert_not_called()
+
+    def test_generic_exception_replies_error(self):
+        update = _make_update(ADMIN_ID)
+        ctx = self._make_ctx()
+        with patch("subprocess.run", side_effect=OSError("err")):
+            run(bot.cmd_backup(update, ctx))
+        self.assertIn("❌", update.message.reply_text.call_args_list[-1][0][0])
+        ctx.bot.send_message.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# _notify — send message to configured chat, swallow errors
+# ---------------------------------------------------------------------------
+
+
+class TestNotify(unittest.TestCase):
+    def test_success_sends_to_chat(self):
+        mock_bot = MagicMock()
+        mock_bot.send_message = AsyncMock()
+        run(bot._notify(mock_bot, "test message"))
+        mock_bot.send_message.assert_called_once_with(
+            chat_id=bot.CHAT_ID,
+            text="test message",
+        )
+
+    def test_send_error_does_not_raise(self):
+        mock_bot = MagicMock()
+        mock_bot.send_message = AsyncMock(side_effect=Exception("connection error"))
+        run(bot._notify(mock_bot, "test message"))
+
+
+# ---------------------------------------------------------------------------
+# _format_players — verifies bot reads nested players dict correctly
+# ---------------------------------------------------------------------------
+
+
+class TestFormatPlayers(unittest.TestCase):
+    def test_shows_count(self):
+        result = bot._format_players({"players": {"online": 5, "max": 20}})
+        self.assertIn("5/20", result)
+
+    def test_zero_count(self):
+        result = bot._format_players({"players": {"online": 0, "max": 0}})
+        self.assertIn("0/0", result)
+
+    def test_missing_players_key_no_crash(self):
+        result = bot._format_players({})
+        self.assertIn("0/0", result)
+
+    def test_sample_names_listed(self):
+        data = {
+            "players": {
+                "online": 2,
+                "max": 20,
+                "sample": [{"name": "Alice"}, {"name": "Bob"}],
+            }
+        }
+        result = bot._format_players(data)
+        self.assertIn("Alice", result)
+        self.assertIn("Bob", result)
+
+
+# ---------------------------------------------------------------------------
+# _format_status — verifies icon and nested players dict for /status
+# ---------------------------------------------------------------------------
+
+
+class TestFormatStatus(unittest.TestCase):
+    def test_online_shows_checkmark(self):
+        msg = bot._format_status({"status": "online"})
+        self.assertTrue(msg.startswith("✅"), f"Expected ✅ prefix, got: {msg!r}")
+
+    def test_offline_shows_cross(self):
+        msg = bot._format_status({"status": "offline"})
+        self.assertTrue(msg.startswith("❌"), f"Expected ❌ prefix, got: {msg!r}")
+
+    def test_starting_shows_cross(self):
+        msg = bot._format_status({"status": "starting"})
+        self.assertTrue(msg.startswith("❌"), f"Expected ❌ prefix, got: {msg!r}")
+
+    def test_unknown_shows_cross(self):
+        msg = bot._format_status({})
+        self.assertTrue(msg.startswith("❌"), f"Expected ❌ prefix, got: {msg!r}")
+
+    def test_shows_player_count(self):
+        data = {"status": "online", "players": {"online": 3, "max": 20}}
+        result = bot._format_status(data)
+        self.assertIn("3/20", result)
+
+    def test_missing_players_key_shows_zero(self):
+        result = bot._format_status({"status": "online"})
+        self.assertIn("0/0", result)
+
+
+# ---------------------------------------------------------------------------
+# health_poll_loop — ServerState transition logic
+# ---------------------------------------------------------------------------
+
+
+class TestHealthPollLoop(unittest.IsolatedAsyncioTestCase):
+    async def _run_loop_iterations(self, fetch_side_effect):
+        """Run health_poll_loop for N iterations via side_effect list, return notify calls."""
+        mock_bot = MagicMock()
+        notify_calls = []
+
+        # Append a sentinel CancelledError so the loop stops after exhausting the list
+        fetch_responses = list(fetch_side_effect) + [asyncio.CancelledError()]
+
+        call_idx = [0]
+
+        async def fake_fetch(session):
+            resp = fetch_responses[call_idx[0]]
+            call_idx[0] += 1
+            if isinstance(resp, type) and issubclass(resp, BaseException):
+                raise resp()
+            if isinstance(resp, BaseException):
+                raise resp
+            return resp
+
+        async def fake_notify(b, msg):
+            notify_calls.append(msg)
+
+        with patch.object(bot, "fetch_health", new=fake_fetch), \
+             patch.object(bot, "_notify", new=fake_notify), \
+             patch.object(bot, "POLL_INTERVAL", 0):
+            try:
+                await bot.health_poll_loop(mock_bot)
+            except asyncio.CancelledError:
+                pass
+
+        return notify_calls
+
+    async def test_offline_then_online_triggers_online_notify(self):
+        # ServerState skips notification on first poll (UNKNOWN state); must go offline→online
+        notify_calls = await self._run_loop_iterations([
+            {"status": "offline"},   # poll 1: UNKNOWN→OFFLINE, no notify
+            {"status": "online"},    # poll 2: OFFLINE→ONLINE, fires "online" notify
+        ])
+        online_msgs = [m for m in notify_calls if "online" in m.lower()]
+        self.assertTrue(online_msgs, f"Expected an 'online' notification, got: {notify_calls}")
+
+    async def test_offline_status_does_not_trigger_online_notify(self):
+        notify_calls = await self._run_loop_iterations([
+            {"status": "offline"},   # poll 1: UNKNOWN→OFFLINE, no notify
+            {"status": "offline"},   # poll 2: no change, no notify
+        ])
+        for msg in notify_calls:
+            self.assertNotIn("online", msg.lower(), f"Unexpected online notify: {msg!r}")
+
+    async def test_none_fetch_does_not_trigger_online_notify(self):
+        notify_calls = await self._run_loop_iterations([
+            None,   # poll 1: fetch failed, no notify
+            None,   # poll 2: still failed, no notify
+        ])
+        for msg in notify_calls:
+            self.assertNotIn("online", msg.lower(), f"Unexpected online notify: {msg!r}")
 
 
 if __name__ == "__main__":
