@@ -3,7 +3,7 @@ Auth identity sidecar service.
 
 Exposes GET /auth?ip=<ip> and classifies connecting IPs:
   - Tailscale (100.x.x.x): allowed, identity resolved via `tailscale whois`
-  - Local-net (192.168.x.x): allowed if reachable, identity from ARP + rDNS
+  - Local-net (RFC 1918 private): allowed if reachable, identity from ARP + rDNS
   - All others: denied + Telegram notification sent
 """
 
@@ -12,9 +12,11 @@ import ipaddress
 import json
 import logging
 import os
+import re
 import socket
 import subprocess
 import sys
+import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -28,9 +30,10 @@ import requests
 LISTEN_PORT = int(os.environ.get("AUTH_SIDECAR_PORT", "8181"))
 TELEGRAM_BOT_TOKEN: str = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID: str = os.environ.get("TELEGRAM_CHAT_ID", "")
+MAPPING_FILE: str = os.environ.get("MAC_MAPPING_FILE", "/data/mac-mapping.json")
+MAPPING_RELOAD_INTERVAL: int = int(os.environ.get("MAPPING_RELOAD_INTERVAL", "30"))
 
 TAILSCALE_PREFIX = ipaddress.ip_network("100.64.0.0/10")
-LOCAL_NET_PREFIX = ipaddress.ip_network("192.168.0.0/16")
 
 PING_TIMEOUT_SECONDS = 2
 WHOIS_TIMEOUT_SECONDS = 5
@@ -50,6 +53,14 @@ logging.basicConfig(
 log = logging.getLogger("auth-sidecar")
 
 # ---------------------------------------------------------------------------
+# Module-level state
+# ---------------------------------------------------------------------------
+
+_mapping_cache: dict[str, str] = {}
+# in-memory per-session dedup; intentionally reset on restart (owner decision 2026-09-09)
+_notified_macs: set[str] = set()
+
+# ---------------------------------------------------------------------------
 # IP classification
 # ---------------------------------------------------------------------------
 
@@ -63,9 +74,50 @@ def is_tailscale(ip: str) -> bool:
 
 def is_local_net(ip: str) -> bool:
     try:
-        return ipaddress.ip_address(ip) in LOCAL_NET_PREFIX
+        return ipaddress.ip_address(ip).is_private
     except ValueError:
         return False
+
+
+# ---------------------------------------------------------------------------
+# MAC / key normalization and mapping
+# ---------------------------------------------------------------------------
+
+_MAC_RE = re.compile(r'^([0-9a-fA-F]{2}[-:]){5}[0-9a-fA-F]{2}$')
+
+
+def normalize_key(key: str) -> str:
+    """Normalize mapping key: MACs get dash→colon + lowercase; IPs pass through."""
+    if _MAC_RE.match(key):
+        return key.replace("-", ":").lower()
+    return key
+
+
+def load_mapping(path: str = MAPPING_FILE) -> dict[str, str]:
+    try:
+        with open(path) as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            log.error("Mapping file is not a JSON object: %s", path)
+            return {}
+        return {normalize_key(k): v for k, v in data.items()}
+    except FileNotFoundError:
+        return {}
+    except (json.JSONDecodeError, OSError) as exc:
+        log.error("Failed to load mapping file %s: %s", path, exc)
+        return {}
+
+
+def lookup_basename(key: str, mapping: dict[str, str]) -> str | None:
+    return mapping.get(normalize_key(key)) or None
+
+
+def _mapping_reload_loop() -> None:
+    while True:
+        time.sleep(MAPPING_RELOAD_INTERVAL)
+        global _mapping_cache
+        _mapping_cache = load_mapping()
+        log.debug("Mapping reloaded: %d entries", len(_mapping_cache))
 
 
 # ---------------------------------------------------------------------------
@@ -170,31 +222,32 @@ def classify_ip(ip: str) -> dict:
     """
     if is_tailscale(ip):
         identity = resolve_tailscale_identity(ip)
-        return {
-            "allowed": True,
-            "reason": "tailscale",
-            "identity": identity,
-        }
+        basename = lookup_basename(ip, _mapping_cache)
+        if basename:
+            log.info("Tailscale IP %s mapped to basename %s", ip, basename)
+            identity["basename"] = basename
+        return {"allowed": True, "reason": "tailscale", "identity": identity}
 
     if is_local_net(ip):
         identity = resolve_local_identity(ip)
+        mac = identity.get("mac", "")
+        if mac:
+            basename = lookup_basename(mac, _mapping_cache)
+            if basename:
+                log.info("MAC %s mapped to basename %s", mac, basename)
+                identity["basename"] = basename
+            elif mac not in _notified_macs:
+                _notified_macs.add(mac)
+                log.info("Unknown MAC %s — notifying Telegram", mac)
+                send_telegram(
+                    f"[auth-sidecar] Unknown client: MAC={mac} "
+                    f"hostname={identity.get('hostname') or 'unknown'} ip={ip}"
+                )
         if not identity["reachable"]:
-            return {
-                "allowed": False,
-                "reason": "local-net-unreachable",
-                "identity": identity,
-            }
-        return {
-            "allowed": True,
-            "reason": "local-net",
-            "identity": identity,
-        }
+            return {"allowed": False, "reason": "local-net-unreachable", "identity": identity}
+        return {"allowed": True, "reason": "local-net", "identity": identity}
 
-    return {
-        "allowed": False,
-        "reason": "denied",
-        "identity": {},
-    }
+    return {"allowed": False, "reason": "denied", "identity": {}}
 
 
 # ---------------------------------------------------------------------------
@@ -248,6 +301,13 @@ class AuthHandler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
+    global _mapping_cache
+    _mapping_cache = load_mapping()
+    log.info("Loaded %d mapping entries from %s", len(_mapping_cache), MAPPING_FILE)
+
+    t = threading.Thread(target=_mapping_reload_loop, daemon=True)
+    t.start()
+
     log.info("Auth sidecar starting on port %d", LISTEN_PORT)
     server = HTTPServer(("0.0.0.0", LISTEN_PORT), AuthHandler)
     try:
