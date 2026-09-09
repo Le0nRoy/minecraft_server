@@ -124,9 +124,11 @@ services:
       RCON_WARN_DELAY: "${RCON_WARN_DELAY:-10}"
       MINECRAFT_DATA_PATH: "/minecraft_data"
       LEVEL: "${LEVEL:-world}"
+      MAC_MAPPING_FILE: "${MAC_MAPPING_FILE:-/data/mac-mapping.json}"
     volumes:
       - ../scripts:/scripts:ro
       - minecraft_data:/minecraft_data:rw
+      - auth_data:/data
     depends_on:
       - minecraft
       - socket-proxy
@@ -146,12 +148,17 @@ services:
       TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID}"
       AUTH_SIDECAR_PORT: "${AUTH_SIDECAR_PORT:-8181}"
       LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+      MAC_MAPPING_FILE: "${MAC_MAPPING_FILE:-/data/mac-mapping.json}"
+      MAPPING_RELOAD_INTERVAL: "${MAPPING_RELOAD_INTERVAL:-30}"
+    volumes:
+      - auth_data:/data
     depends_on:
       - minecraft
     restart: unless-stopped
 
 volumes:
   minecraft_data:
+  auth_data:
 
 networks:
   minecraft:

@@ -7,12 +7,15 @@ list players, and trigger backups.
 
 import asyncio
 import functools
+import json
 import logging
 import os
+import re
 import secrets
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 
 import aiohttp
@@ -50,6 +53,7 @@ WIPE_TOKEN_TTL: int = 60  # seconds a wipe confirmation token stays valid
 RCON_HOST: str = os.environ.get("RCON_HOST", "minecraft")
 RCON_PORT: int = int(os.environ.get("RCON_PORT", "25575"))
 RCON_PASSWORD: str = os.environ.get("RCON_PASSWORD", "")
+MAC_MAPPING_FILE: str = os.environ.get("MAC_MAPPING_FILE", "/data/mac-mapping.json")
 
 
 def _parse_admin_ids(raw: str) -> list[int]:
@@ -96,7 +100,6 @@ async def _rcon_command(host: str, port: int, password: str, cmd: str) -> str:
         with MCRcon(host, password, port) as mcr:
             return mcr.command(cmd)
     return await asyncio.to_thread(_sync)
-
 
 # ---------------------------------------------------------------------------
 # Server state machine
@@ -217,6 +220,43 @@ def _format_players(data: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
+# MAC/IP mapping helpers
+# ---------------------------------------------------------------------------
+
+_MAC_RE = re.compile(r'^([0-9a-fA-F]{2}[-:]){5}[0-9a-fA-F]{2}$')
+_MAC_OR_IP_RE = re.compile(
+    r'^([0-9a-fA-F]{2}[-:]){5}[0-9a-fA-F]{2}$'
+    r'|^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}$'
+)
+
+
+def _normalize_key(key: str) -> str:
+    if _MAC_RE.match(key):
+        return key.replace("-", ":").lower()
+    return key
+
+
+def _load_mapping_file() -> dict:
+    try:
+        with open(MAC_MAPPING_FILE) as f:
+            data = json.load(f)
+        return {_normalize_key(k): v for k, v in data.items()}
+    except FileNotFoundError:
+        return {}
+    except (json.JSONDecodeError, OSError) as exc:
+        logger.error("Failed to load mapping file: %s", exc)
+        return {}
+
+
+def _write_mapping_atomic(data: dict) -> None:
+    dir_ = os.path.dirname(MAC_MAPPING_FILE) or "."
+    with tempfile.NamedTemporaryFile("w", dir=dir_, suffix=".tmp", delete=False) as f:
+        json.dump(data, f, indent=2)
+        tmp = f.name
+    os.replace(tmp, MAC_MAPPING_FILE)
+
+
+# ---------------------------------------------------------------------------
 # Command handlers
 # ---------------------------------------------------------------------------
 
@@ -228,6 +268,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/status — Show current server status\n"
         "/players — List online players\n"
         "/backup — Trigger a server backup\n"
+        "/macmap — Manage MAC/IP → basename mappings\n"
     )
     if update.effective_user.id in ADMIN_USER_IDS:
         text += (
@@ -490,6 +531,82 @@ async def cmd_wipe(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await _notify(context.bot, success_msg)
 
 
+async def cmd_macmap(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Manage MAC/Tailscale-IP → basename mappings. Admin-only."""
+    if str(update.effective_chat.id) != CHAT_ID:
+        await update.message.reply_text("Not authorised.")
+        return
+
+    args = context.args or []
+    if not args:
+        await update.message.reply_text(
+            "Usage:\n"
+            "/macmap list\n"
+            "/macmap set <mac-or-tailscale-ip> <basename>\n"
+            "/macmap del <mac-or-tailscale-ip>"
+        )
+        return
+
+    subcommand = args[0].lower()
+
+    if subcommand == "list":
+        mapping = _load_mapping_file()
+        if not mapping:
+            await update.message.reply_text("MAC/IP mapping is empty.")
+            return
+        lines = [f"MAC/IP mapping ({len(mapping)} entries):"]
+        for k, v in mapping.items():
+            lines.append(f"• {k} → {v}")
+        await update.message.reply_text("\n".join(lines))
+
+    elif subcommand == "set":
+        if len(args) < 3:
+            await update.message.reply_text("Usage: /macmap set <mac-or-ip> <basename>")
+            return
+        raw_key = args[1]
+        if not _MAC_OR_IP_RE.match(raw_key):
+            await update.message.reply_text(
+                f"Invalid key: {raw_key!r}. "
+                "Expected MAC (aa:bb:cc:dd:ee:ff or aa-bb-cc-dd-ee-ff) or Tailscale IP."
+            )
+            return
+        key = _normalize_key(raw_key)
+        basename = " ".join(args[2:])
+        mapping = _load_mapping_file()
+        mapping[key] = basename
+        try:
+            _write_mapping_atomic(mapping)
+            logger.info("macmap set: %s → %s", key, basename)
+            await update.message.reply_text(f"Mapped {key} → {basename}")
+        except OSError as exc:
+            logger.error("macmap set write failed: %s", exc)
+            await update.message.reply_text(f"Write failed: {exc}")
+
+    elif subcommand == "del":
+        if len(args) < 2:
+            await update.message.reply_text("Usage: /macmap del <mac-or-ip>")
+            return
+        raw_key = args[1]
+        key = _normalize_key(raw_key)
+        mapping = _load_mapping_file()
+        if key not in mapping:
+            await update.message.reply_text(f"Not found: {key}")
+            return
+        del mapping[key]
+        try:
+            _write_mapping_atomic(mapping)
+            logger.info("macmap del: %s", key)
+            await update.message.reply_text(f"Removed mapping for {key}")
+        except OSError as exc:
+            logger.error("macmap del write failed: %s", exc)
+            await update.message.reply_text(f"Write failed: {exc}")
+
+    else:
+        await update.message.reply_text(
+            f"Unknown subcommand: {subcommand!r}. Use list, set, or del."
+        )
+
+
 # ---------------------------------------------------------------------------
 # Background health polling
 # ---------------------------------------------------------------------------
@@ -606,6 +723,7 @@ def main() -> None:
     application.add_handler(CommandHandler("whitelist", cmd_whitelist))
     application.add_handler(CommandHandler("rcon", cmd_rcon))
     application.add_handler(CommandHandler("wipe", cmd_wipe))
+    application.add_handler(CommandHandler("macmap", cmd_macmap))
 
     # Register SIGTERM handler for graceful Docker shutdown
     signal.signal(signal.SIGTERM, lambda *_: handle_sigterm(application))
