@@ -168,9 +168,6 @@ def _format_players(data: dict) -> str:
 # ---------------------------------------------------------------------------
 
 _MAC_RE = re.compile(r'^([0-9a-fA-F]{2}[-:]){5}[0-9a-fA-F]{2}$')
-_TAILSCALE_IP_RE = re.compile(
-    r'^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}$'
-)
 _MAC_OR_IP_RE = re.compile(
     r'^([0-9a-fA-F]{2}[-:]){5}[0-9a-fA-F]{2}$'
     r'|^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}$'
@@ -186,7 +183,8 @@ def _normalize_key(key: str) -> str:
 def _load_mapping_file() -> dict:
     try:
         with open(MAC_MAPPING_FILE) as f:
-            return json.load(f)
+            data = json.load(f)
+        return {_normalize_key(k): v for k, v in data.items()}
     except FileNotFoundError:
         return {}
     except (json.JSONDecodeError, OSError) as exc:

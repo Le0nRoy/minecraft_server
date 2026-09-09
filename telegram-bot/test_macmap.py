@@ -101,6 +101,18 @@ class TestMappingFileIO(unittest.TestCase):
                 result = bot._load_mapping_file()
         self.assertEqual(result, {"aa:bb:cc:dd:ee:ff": "Player1"})
 
+    def test_load_normalizes_dash_mac_keys(self):
+        """Keys with dashes in the file must be normalized to colon form on load."""
+        import json as _json
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "mapping.json")
+            with open(path, "w") as f:
+                _json.dump({"AA-BB-CC-DD-EE-FF": "Player2"}, f)
+            with patch.object(bot, "MAC_MAPPING_FILE", path):
+                result = bot._load_mapping_file()
+        self.assertIn("aa:bb:cc:dd:ee:ff", result)
+        self.assertNotIn("AA-BB-CC-DD-EE-FF", result)
+
 
 # ---------------------------------------------------------------------------
 # cmd_macmap — auth

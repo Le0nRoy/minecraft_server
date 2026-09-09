@@ -52,6 +52,15 @@ class TestIpClassification(unittest.TestCase):
     def test_local_net_rejected_external(self):
         self.assertFalse(app.is_local_net("8.8.8.8"))
 
+    # is_private in Python 3.12 includes loopback and link-local beyond RFC 1918.
+    # This is an accepted design decision: loopback/link-local are harmless in practice
+    # (Velocity never forwards them) and the loopback inclusion fixes health-check spam.
+    def test_local_net_loopback_accepted(self):
+        self.assertTrue(app.is_local_net("127.0.0.1"))
+
+    def test_local_net_link_local_accepted(self):
+        self.assertTrue(app.is_local_net("169.254.1.1"))
+
     def test_invalid_ip_tailscale(self):
         self.assertFalse(app.is_tailscale("not-an-ip"))
 
