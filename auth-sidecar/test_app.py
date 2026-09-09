@@ -3,6 +3,7 @@
 import json
 import subprocess
 import sys
+import tempfile
 import types
 import unittest
 from io import BytesIO
@@ -39,17 +40,125 @@ class TestIpClassification(unittest.TestCase):
     def test_non_tailscale_rejected(self):
         self.assertFalse(app.is_tailscale("8.8.8.8"))
 
-    def test_local_net_accepted(self):
+    def test_local_net_accepted_192168(self):
         self.assertTrue(app.is_local_net("192.168.1.50"))
 
-    def test_local_net_rejected_outside(self):
-        self.assertFalse(app.is_local_net("10.0.0.1"))
+    def test_local_net_accepted_rfc1918_10(self):
+        self.assertTrue(app.is_local_net("10.0.0.1"))
+
+    def test_local_net_accepted_rfc1918_172(self):
+        self.assertTrue(app.is_local_net("172.16.0.1"))
+
+    def test_local_net_rejected_external(self):
+        self.assertFalse(app.is_local_net("8.8.8.8"))
 
     def test_invalid_ip_tailscale(self):
         self.assertFalse(app.is_tailscale("not-an-ip"))
 
     def test_invalid_ip_local(self):
         self.assertFalse(app.is_local_net("not-an-ip"))
+
+
+# ---------------------------------------------------------------------------
+# normalize_key
+# ---------------------------------------------------------------------------
+
+
+class TestNormalizeKey(unittest.TestCase):
+    def test_mac_dashes_to_colons_lowercase(self):
+        self.assertEqual(app.normalize_key("AA-BB-CC-DD-EE-FF"), "aa:bb:cc:dd:ee:ff")
+
+    def test_mac_colons_already_normalized(self):
+        self.assertEqual(app.normalize_key("aa:bb:cc:dd:ee:ff"), "aa:bb:cc:dd:ee:ff")
+
+    def test_mac_uppercase_colons_lowercased(self):
+        self.assertEqual(app.normalize_key("AA:BB:CC:DD:EE:FF"), "aa:bb:cc:dd:ee:ff")
+
+    def test_tailscale_ip_passthrough(self):
+        self.assertEqual(app.normalize_key("100.64.1.2"), "100.64.1.2")
+
+    def test_external_ip_passthrough(self):
+        self.assertEqual(app.normalize_key("8.8.8.8"), "8.8.8.8")
+
+
+# ---------------------------------------------------------------------------
+# load_mapping
+# ---------------------------------------------------------------------------
+
+
+class TestLoadMapping(unittest.TestCase):
+    def test_valid_json_normalizes_keys(self):
+        data = json.dumps({"AA:BB:CC:DD:EE:FF": "Player1", "100.64.1.2": "TsPlayer"})
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+            f.write(data)
+            path = f.name
+        try:
+            result = app.load_mapping(path)
+            self.assertEqual(result["aa:bb:cc:dd:ee:ff"], "Player1")
+            self.assertEqual(result["100.64.1.2"], "TsPlayer")
+        finally:
+            os.unlink(path)
+
+    def test_file_missing_returns_empty(self):
+        result = app.load_mapping("/nonexistent/mac-mapping.json")
+        self.assertEqual(result, {})
+
+    def test_malformed_json_returns_empty(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+            f.write("not json {{{")
+            path = f.name
+        try:
+            result = app.load_mapping(path)
+            self.assertEqual(result, {})
+        finally:
+            os.unlink(path)
+
+    def test_non_dict_json_returns_empty(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+            f.write('["list", "not", "dict"]')
+            path = f.name
+        try:
+            result = app.load_mapping(path)
+            self.assertEqual(result, {})
+        finally:
+            os.unlink(path)
+
+    def test_dash_mac_keys_normalized(self):
+        data = json.dumps({"aa-bb-cc-dd-ee-ff": "Player2"})
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+            f.write(data)
+            path = f.name
+        try:
+            result = app.load_mapping(path)
+            self.assertIn("aa:bb:cc:dd:ee:ff", result)
+        finally:
+            os.unlink(path)
+
+
+# ---------------------------------------------------------------------------
+# lookup_basename
+# ---------------------------------------------------------------------------
+
+
+class TestLookupBasename(unittest.TestCase):
+    def setUp(self):
+        self.mapping = {"aa:bb:cc:dd:ee:ff": "LocalPlayer", "100.64.1.2": "TsPlayer"}
+
+    def test_mac_exact_match(self):
+        self.assertEqual(app.lookup_basename("aa:bb:cc:dd:ee:ff", self.mapping), "LocalPlayer")
+
+    def test_mac_uppercase_normalized(self):
+        self.assertEqual(app.lookup_basename("AA:BB:CC:DD:EE:FF", self.mapping), "LocalPlayer")
+
+    def test_mac_not_found_returns_none(self):
+        self.assertIsNone(app.lookup_basename("11:22:33:44:55:66", self.mapping))
+
+    def test_empty_basename_returns_none(self):
+        mapping = {"aa:bb:cc:dd:ee:ff": ""}
+        self.assertIsNone(app.lookup_basename("aa:bb:cc:dd:ee:ff", mapping))
+
+    def test_tailscale_ip_match(self):
+        self.assertEqual(app.lookup_basename("100.64.1.2", self.mapping), "TsPlayer")
 
 
 # ---------------------------------------------------------------------------
@@ -149,20 +258,67 @@ class TestReverseDns(unittest.TestCase):
 
 
 class TestClassifyIp(unittest.TestCase):
+    def setUp(self):
+        app._notified_macs.clear()
+
     def test_tailscale_allowed(self):
-        with patch.object(app, "resolve_tailscale_identity", return_value={"tailscale_raw": "node"}):
+        with patch.object(app, "resolve_tailscale_identity", return_value={"tailscale_raw": "node"}), \
+             patch.object(app, "_mapping_cache", {}):
             decision = app.classify_ip("100.100.1.1")
         self.assertTrue(decision["allowed"])
         self.assertEqual(decision["reason"], "tailscale")
 
+    def test_tailscale_with_ip_in_mapping_sets_basename(self):
+        ts_ip = "100.64.1.2"
+        with patch.object(app, "resolve_tailscale_identity", return_value={"tailscale_raw": "node"}), \
+             patch.object(app, "_mapping_cache", {"100.64.1.2": "TsPlayer"}):
+            decision = app.classify_ip(ts_ip)
+        self.assertTrue(decision["allowed"])
+        self.assertEqual(decision["identity"].get("basename"), "TsPlayer")
+
+    def test_tailscale_without_mapping_no_basename_no_notification(self):
+        with patch.object(app, "resolve_tailscale_identity", return_value={"tailscale_raw": "node"}), \
+             patch.object(app, "_mapping_cache", {}), \
+             patch.object(app, "send_telegram") as mock_tg:
+            decision = app.classify_ip("100.100.1.1")
+        self.assertNotIn("basename", decision["identity"])
+        mock_tg.assert_not_called()
+
     def test_local_allowed(self):
-        with patch.object(app, "resolve_local_identity", return_value={"reachable": True, "mac": "", "hostname": ""}):
+        with patch.object(app, "resolve_local_identity", return_value={"reachable": True, "mac": "", "hostname": ""}), \
+             patch.object(app, "_mapping_cache", {}):
             decision = app.classify_ip("192.168.1.50")
         self.assertTrue(decision["allowed"])
         self.assertEqual(decision["reason"], "local-net")
 
+    def test_local_mac_in_mapping_sets_basename(self):
+        with patch.object(app, "resolve_local_identity", return_value={"reachable": True, "mac": "aa:bb:cc:dd:ee:ff", "hostname": "host"}), \
+             patch.object(app, "_mapping_cache", {"aa:bb:cc:dd:ee:ff": "LocalPlayer"}), \
+             patch.object(app, "send_telegram") as mock_tg:
+            decision = app.classify_ip("192.168.1.10")
+        self.assertEqual(decision["identity"].get("basename"), "LocalPlayer")
+        mock_tg.assert_not_called()
+
+    def test_local_unmapped_mac_sends_telegram_once(self):
+        with patch.object(app, "resolve_local_identity", return_value={"reachable": True, "mac": "11:22:33:44:55:66", "hostname": "host"}), \
+             patch.object(app, "_mapping_cache", {}), \
+             patch.object(app, "send_telegram") as mock_tg:
+            app.classify_ip("192.168.1.20")
+            app.classify_ip("192.168.1.20")
+        mock_tg.assert_called_once()
+
+    def test_local_unmapped_mac_first_seen_notifies(self):
+        with patch.object(app, "resolve_local_identity", return_value={"reachable": True, "mac": "aa:11:22:33:44:55", "hostname": ""}), \
+             patch.object(app, "_mapping_cache", {}), \
+             patch.object(app, "send_telegram") as mock_tg:
+            decision = app.classify_ip("192.168.1.30")
+        self.assertNotIn("basename", decision["identity"])
+        mock_tg.assert_called_once()
+        self.assertIn("aa:11:22:33:44:55", app._notified_macs)
+
     def test_local_unreachable_denied(self):
-        with patch.object(app, "resolve_local_identity", return_value={"reachable": False, "mac": "", "hostname": ""}):
+        with patch.object(app, "resolve_local_identity", return_value={"reachable": False, "mac": "", "hostname": ""}), \
+             patch.object(app, "_mapping_cache", {}):
             decision = app.classify_ip("192.168.1.50")
         self.assertFalse(decision["allowed"])
         self.assertEqual(decision["reason"], "local-net-unreachable")
