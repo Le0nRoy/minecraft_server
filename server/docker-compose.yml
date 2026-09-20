@@ -101,6 +101,8 @@ services:
       RCON_PORT: "25575"
       RCON_PASSWORD: "${RCON_PASSWORD}"
       MAC_MAPPING_FILE: "${MAC_MAPPING_FILE:-/data/mac-mapping.json}"
+      ALLOWLIST_FILE: "${ALLOWLIST_FILE:-/data/allowlist.json}"
+      DENYLIST_FILE: "${DENYLIST_FILE:-/data/denylist.json}"
     volumes:
       - auth_data:/data
     depends_on:
@@ -122,6 +124,8 @@ services:
       LOG_LEVEL: "${LOG_LEVEL:-INFO}"
       MAC_MAPPING_FILE: "${MAC_MAPPING_FILE:-/data/mac-mapping.json}"
       MAPPING_RELOAD_INTERVAL: "${MAPPING_RELOAD_INTERVAL:-30}"
+      ALLOWLIST_FILE: "${ALLOWLIST_FILE:-/data/allowlist.json}"
+      DENYLIST_FILE: "${DENYLIST_FILE:-/data/denylist.json}"
     volumes:
       - auth_data:/data
     depends_on:
