@@ -18,7 +18,7 @@ import tempfile
 import aiohttp
 from telegram import Bot, Update
 from telegram.constants import ParseMode
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -44,6 +44,8 @@ HEALTH_URL: str = f"http://{HEALTHCHECK_HOST}:{HEALTHCHECK_PORT}/health"
 POLL_INTERVAL: int = 60  # seconds between health polls
 BACKUP_SCRIPT: str = "/scripts/backup.sh"
 MAC_MAPPING_FILE: str = os.environ.get("MAC_MAPPING_FILE", "/data/mac-mapping.json")
+ALLOWLIST_FILE: str = os.environ.get("ALLOWLIST_FILE", "/data/allowlist.json")
+DENYLIST_FILE: str = os.environ.get("DENYLIST_FILE", "/data/denylist.json")
 
 # ---------------------------------------------------------------------------
 # Server state machine
@@ -198,6 +200,37 @@ def _write_mapping_atomic(data: dict) -> None:
         json.dump(data, f, indent=2)
         tmp = f.name
     os.replace(tmp, MAC_MAPPING_FILE)
+
+
+def _append_to_list(path: str, key: str) -> None:
+    """Append a normalized key to a JSON array list file atomically. No-op if already present."""
+    normalized = _normalize_key(key)
+    try:
+        try:
+            with open(path) as f:
+                data = json.load(f)
+            if not isinstance(data, list):
+                logger.error("List file is not a JSON array: %s", path)
+                data = []
+        except FileNotFoundError:
+            data = []
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.error("Failed to load list file %s: %s", path, exc)
+            return
+
+        if normalized in data:
+            logger.info("Key %s already in %s — no change", normalized, path)
+            return
+
+        data.append(normalized)
+        dir_ = os.path.dirname(path) or "."
+        with tempfile.NamedTemporaryFile("w", dir=dir_, suffix=".tmp", delete=False) as f:
+            json.dump(data, f, indent=2)
+            tmp = f.name
+        os.replace(tmp, path)
+        logger.info("Added %s to %s", normalized, path)
+    except OSError as exc:
+        logger.error("Failed to write list file %s: %s", path, exc)
 
 
 # ---------------------------------------------------------------------------
@@ -392,6 +425,45 @@ async def cmd_macmap(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 
 # ---------------------------------------------------------------------------
+# Inline keyboard callback handler
+# ---------------------------------------------------------------------------
+
+
+async def handle_list_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle allow|key and deny|key inline button callbacks."""
+    query = update.callback_query
+    if str(update.effective_chat.id) != CHAT_ID:
+        logger.warning("Callback from unauthorized chat %s — ignored", update.effective_chat.id)
+        await query.answer()
+        return
+
+    await query.answer()
+
+    data = query.data or ""
+    if "|" not in data:
+        logger.error("Malformed callback_data (no separator): %r", data)
+        return
+
+    action, key = data.split("|", 1)
+
+    if action == "allow":
+        target_file = ALLOWLIST_FILE
+        label = "Allowlisted"
+    elif action == "deny":
+        target_file = DENYLIST_FILE
+        label = "Denylisted"
+    else:
+        logger.error("Unknown callback action: %r", action)
+        return
+
+    _append_to_list(target_file, key)
+    logger.info("Added %s to %s by chat %s", key, target_file, update.effective_chat.id)
+
+    await query.edit_message_reply_markup(reply_markup=None)
+    await query.message.reply_text(f"{label}: {key}")
+
+
+# ---------------------------------------------------------------------------
 # Background health polling
 # ---------------------------------------------------------------------------
 
@@ -500,6 +572,7 @@ def main() -> None:
     application.add_handler(CommandHandler("players", cmd_players))
     application.add_handler(CommandHandler("backup", cmd_backup))
     application.add_handler(CommandHandler("macmap", cmd_macmap))
+    application.add_handler(CallbackQueryHandler(handle_list_action))
 
     # Register SIGTERM handler for graceful Docker shutdown
     signal.signal(signal.SIGTERM, lambda *_: handle_sigterm(application))
