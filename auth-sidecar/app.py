@@ -365,12 +365,18 @@ class AuthHandler(BaseHTTPRequestHandler):
             if reason == "denied" and ip not in _notified_ips:
                 _notified_ips.add(ip)
                 _append_to_denylist(ip)
+                _denylist_cache.add(normalize_key(ip))
                 log.warning("DENIED external ip=%s — auto-denylisted and notified", ip)
                 send_telegram_with_keyboard(
                     f"[auth-sidecar] DENIED: connection from unknown IP {ip}", ip
                 )
             elif reason == "denylisted":
                 log.info("DENIED ip=%s reason=denylisted (silent)", ip)
+            elif reason == "local-net-unreachable":
+                log.warning("DENIED ip=%s reason=local-net-unreachable", ip)
+                send_telegram(f"[auth-sidecar] DENIED: local-net IP {ip} unreachable")
+            else:
+                log.warning("DENIED ip=%s reason=%s (unhandled)", ip, reason)
             self._respond(403, decision)
             return
 

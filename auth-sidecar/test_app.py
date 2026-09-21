@@ -544,8 +544,7 @@ class TestSendTelegramWithKeyboard(unittest.TestCase):
              patch("requests.post", return_value=mock_resp) as mock_post:
             app.send_telegram_with_keyboard("msg", "aa:bb:cc:dd:ee:ff")
         _, kwargs = mock_post.call_args
-        import json as _json
-        markup = _json.loads(kwargs["json"]["reply_markup"])
+        markup = json.loads(kwargs["json"]["reply_markup"])
         buttons = markup["inline_keyboard"][0]
         for btn in buttons:
             self.assertIn("|", btn["callback_data"])
@@ -669,6 +668,34 @@ class TestAuthHandler(unittest.TestCase):
             status, body = self._call_do_get("/auth?ip=100.100.1.1")
         self.assertEqual(status, 200)
         mock_tg.assert_not_called()
+
+    def test_local_net_unreachable_sends_plain_telegram(self):
+        with patch.object(app, "classify_ip", return_value={"allowed": False, "reason": "local-net-unreachable", "identity": {}}), \
+             patch.object(app, "send_telegram") as mock_tg, \
+             patch.object(app, "send_telegram_with_keyboard") as mock_kbd:
+            status, body = self._call_do_get("/auth?ip=192.168.1.99")
+        self.assertEqual(status, 403)
+        mock_tg.assert_called_once()
+        mock_kbd.assert_not_called()
+        self.assertIn("192.168.1.99", mock_tg.call_args[0][0])
+
+    def test_unhandled_denied_reason_logs_warning(self):
+        with patch.object(app, "classify_ip", return_value={"allowed": False, "reason": "unknown-reason", "identity": {}}), \
+             patch.object(app, "send_telegram") as mock_tg, \
+             patch.object(app, "send_telegram_with_keyboard") as mock_kbd:
+            status, body = self._call_do_get("/auth?ip=192.168.1.99")
+        self.assertEqual(status, 403)
+        mock_tg.assert_not_called()
+        mock_kbd.assert_not_called()
+
+    def test_denied_updates_denylist_cache_immediately(self):
+        app._denylist_cache.discard("9.9.9.9")
+        with patch.object(app, "classify_ip", return_value={"allowed": False, "reason": "denied", "identity": {}}), \
+             patch.object(app, "send_telegram_with_keyboard"), \
+             patch.object(app, "_append_to_denylist"):
+            self._call_do_get("/auth?ip=9.9.9.9")
+        self.assertIn("9.9.9.9", app._denylist_cache)
+        app._denylist_cache.discard("9.9.9.9")
 
 
 if __name__ == "__main__":
