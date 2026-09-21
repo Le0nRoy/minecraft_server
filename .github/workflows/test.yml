@@ -5,6 +5,8 @@ on:
     paths:
       - 'telegram-bot/**'
       - 'healthcheck/**'
+      - 'auth-sidecar/**'
+      - 'velocity/**'
       - 'requirements-dev.txt'
       - 'pytest.ini'
       - '.github/workflows/test.yml'
@@ -12,6 +14,8 @@ on:
     paths:
       - 'telegram-bot/**'
       - 'healthcheck/**'
+      - 'auth-sidecar/**'
+      - 'velocity/**'
       - 'requirements-dev.txt'
       - 'pytest.ini'
       - '.github/workflows/test.yml'
@@ -25,6 +29,19 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install dependencies
-        run: pip install -r requirements-dev.txt -r telegram-bot/requirements.txt -r healthcheck/requirements.txt
-      - name: Run tests
+        run: pip install -r requirements-dev.txt -r telegram-bot/requirements.txt -r healthcheck/requirements.txt -r auth-sidecar/requirements.txt
+      - name: Run tests (telegram-bot, healthcheck)
         run: python -m pytest telegram-bot/ healthcheck/ -v
+      - name: Run tests (auth-sidecar)
+        run: python -m pytest auth-sidecar/ -v
+
+  test-velocity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+      - name: Run Velocity plugin tests
+        run: cd velocity/plugin && ./gradlew test
