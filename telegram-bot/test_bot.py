@@ -3,7 +3,9 @@
 import asyncio
 import logging
 import os
+import subprocess
 import sys
+import time
 import types
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -592,8 +594,6 @@ class TestCmdWipe(unittest.TestCase):
     # -- script TimeoutExpired --
 
     def test_wipe_script_timeout(self):
-        import subprocess
-        import time
         token = "tok"
         bot._wipe_pending[ADMIN_ID] = (token, time.time() + 60)
         update = _make_update(ADMIN_ID)
@@ -870,10 +870,9 @@ class TestCmdBackup(unittest.TestCase):
         ctx.bot.send_message.assert_not_called()
 
     def test_timeout_expired_replies_timed_out(self):
-        import subprocess as subprocess_mod
         update = _make_update(ADMIN_ID)
         ctx = self._make_ctx()
-        with patch("subprocess.run", side_effect=subprocess_mod.TimeoutExpired(cmd="backup.sh", timeout=300)):
+        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="backup.sh", timeout=300)):
             run(bot.cmd_backup(update, ctx))
         self.assertIn("timed out", update.message.reply_text.call_args_list[-1][0][0].lower())
         ctx.bot.send_message.assert_not_called()
