@@ -3,7 +3,7 @@
 
 .PHONY: all up down restart logs logs-all status pull backup restore rcon shell \
         health update-mods packwiz-refresh setup install-systemd install-client-linux \
-        build deploy clean clean-backups help \
+        build deploy clean clean-backups help test \
         _check-env _check-docker
 
 # Load .env if present
@@ -167,6 +167,14 @@ clean-backups:
 	echo "Done."
 
 # ---------------------------------------------------------------------------
+# Testing
+# ---------------------------------------------------------------------------
+
+## test       Run the Python test suite (telegram-bot + healthcheck)
+test:
+	@python -m pytest telegram-bot/ healthcheck/ -v
+
+# ---------------------------------------------------------------------------
 # Help
 # ---------------------------------------------------------------------------
 
@@ -196,5 +204,6 @@ help:
 	@printf "  \033[36m%-24s\033[0m %s\n" "deploy"              "pull → down → up → tail logs 10 s"
 	@printf "  \033[36m%-24s\033[0m %s\n" "clean"               "Remove stopped containers, prune images"
 	@printf "  \033[36m%-24s\033[0m %s\n" "clean-backups"       "Remove backups older than BACKUP_RETENTION_DAYS"
+	@printf "  \033[36m%-24s\033[0m %s\n" "test"                "Run the Python test suite"
 	@printf "  \033[36m%-24s\033[0m %s\n" "help"                "Show this help message"
 	@printf "\n"
