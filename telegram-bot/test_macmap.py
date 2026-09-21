@@ -33,6 +33,7 @@ if "telegram" not in sys.modules:
     tg_ext = _make_module("telegram.ext")
     tg_ext.ApplicationBuilder = MagicMock
     tg_ext.CommandHandler = MagicMock
+    tg_ext.CallbackQueryHandler = MagicMock
     ContextTypesMock = MagicMock()
     ContextTypesMock.DEFAULT_TYPE = MagicMock
     tg_ext.ContextTypes = ContextTypesMock
@@ -281,6 +282,143 @@ class TestWriteMappingAtomic(unittest.TestCase):
             with open(path) as f:
                 data = json.load(f)
             self.assertEqual(data["aa:bb:cc:dd:ee:ff"], "Player")
+
+
+# ---------------------------------------------------------------------------
+# _append_to_list
+# ---------------------------------------------------------------------------
+
+
+class TestAppendToList(unittest.TestCase):
+    def test_creates_file_if_missing(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "allowlist.json")
+            bot._append_to_list(path, "1.2.3.4")
+            with open(path) as f:
+                data = json.load(f)
+            self.assertIn("1.2.3.4", data)
+
+    def test_appends_new_key(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "list.json")
+            with open(path, "w") as f:
+                json.dump(["10.0.0.1"], f)
+            bot._append_to_list(path, "1.2.3.4")
+            with open(path) as f:
+                data = json.load(f)
+            self.assertIn("1.2.3.4", data)
+            self.assertIn("10.0.0.1", data)
+
+    def test_skips_duplicate(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "list.json")
+            with open(path, "w") as f:
+                json.dump(["1.2.3.4"], f)
+            bot._append_to_list(path, "1.2.3.4")
+            with open(path) as f:
+                data = json.load(f)
+            self.assertEqual(data.count("1.2.3.4"), 1)
+
+    def test_normalizes_mac_key(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "list.json")
+            bot._append_to_list(path, "AA:BB:CC:DD:EE:FF")
+            with open(path) as f:
+                data = json.load(f)
+            self.assertIn("aa:bb:cc:dd:ee:ff", data)
+
+    def test_atomic_write(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "list.json")
+            bot._append_to_list(path, "1.2.3.4")
+            with open(path) as f:
+                data = json.load(f)
+            self.assertIsInstance(data, list)
+
+
+# ---------------------------------------------------------------------------
+# handle_list_action
+# ---------------------------------------------------------------------------
+
+
+def _make_callback_query(chat_id: str = ADMIN_CHAT_ID, data: str = "allow|1.2.3.4") -> MagicMock:
+    query = MagicMock()
+    query.data = data
+    query.answer = AsyncMock()
+    query.edit_message_reply_markup = AsyncMock()
+    query.message = MagicMock()
+    query.message.reply_text = AsyncMock()
+    update = MagicMock()
+    update.effective_chat.id = int(chat_id) if chat_id.lstrip("-").isdigit() else chat_id
+    update.callback_query = query
+    ctx = MagicMock()
+    return update, ctx
+
+
+class TestHandleListAction(unittest.TestCase):
+    def test_unauthorized_chat_ignored(self):
+        update, ctx = _make_callback_query(chat_id="99999", data="allow|1.2.3.4")
+        with patch.object(bot, "_append_to_list") as mock_append:
+            run(bot.handle_list_action(update, ctx))
+        mock_append.assert_not_called()
+
+    def test_allow_action_writes_to_allowlist(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            allowlist_path = os.path.join(tmpdir, "allowlist.json")
+            update, ctx = _make_callback_query(data="allow|1.2.3.4")
+            with patch.object(bot, "ALLOWLIST_FILE", allowlist_path), \
+                 patch.object(bot, "DENYLIST_FILE", os.path.join(tmpdir, "denylist.json")):
+                run(bot.handle_list_action(update, ctx))
+            with open(allowlist_path) as f:
+                data = json.load(f)
+            self.assertIn("1.2.3.4", data)
+
+    def test_deny_action_writes_to_denylist(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            denylist_path = os.path.join(tmpdir, "denylist.json")
+            update, ctx = _make_callback_query(data="deny|aa:bb:cc:dd:ee:ff")
+            with patch.object(bot, "ALLOWLIST_FILE", os.path.join(tmpdir, "allowlist.json")), \
+                 patch.object(bot, "DENYLIST_FILE", denylist_path):
+                run(bot.handle_list_action(update, ctx))
+            with open(denylist_path) as f:
+                data = json.load(f)
+            self.assertIn("aa:bb:cc:dd:ee:ff", data)
+
+    def test_malformed_callback_data_no_crash(self):
+        update, ctx = _make_callback_query(data="malformed-no-pipe")
+        with patch.object(bot, "_append_to_list") as mock_append:
+            run(bot.handle_list_action(update, ctx))
+        mock_append.assert_not_called()
+
+    def test_buttons_removed_after_action(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            update, ctx = _make_callback_query(data="allow|1.2.3.4")
+            with patch.object(bot, "ALLOWLIST_FILE", os.path.join(tmpdir, "allowlist.json")), \
+                 patch.object(bot, "DENYLIST_FILE", os.path.join(tmpdir, "denylist.json")):
+                run(bot.handle_list_action(update, ctx))
+        update.callback_query.edit_message_reply_markup.assert_called_once_with(reply_markup=None)
+
+    def test_confirmation_reply_sent(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            update, ctx = _make_callback_query(data="deny|1.2.3.4")
+            with patch.object(bot, "ALLOWLIST_FILE", os.path.join(tmpdir, "allowlist.json")), \
+                 patch.object(bot, "DENYLIST_FILE", os.path.join(tmpdir, "denylist.json")):
+                run(bot.handle_list_action(update, ctx))
+        update.callback_query.message.reply_text.assert_called_once()
+
+    def test_duplicate_key_graceful(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            allowlist_path = os.path.join(tmpdir, "allowlist.json")
+            with open(allowlist_path, "w") as f:
+                json.dump(["1.2.3.4"], f)
+            update, ctx = _make_callback_query(data="allow|1.2.3.4")
+            with patch.object(bot, "ALLOWLIST_FILE", allowlist_path), \
+                 patch.object(bot, "DENYLIST_FILE", os.path.join(tmpdir, "denylist.json")):
+                run(bot.handle_list_action(update, ctx))
+            with open(allowlist_path) as f:
+                data = json.load(f)
+            self.assertEqual(data.count("1.2.3.4"), 1)
+            update.callback_query.message.reply_text.assert_called_once()
 
 
 if __name__ == "__main__":

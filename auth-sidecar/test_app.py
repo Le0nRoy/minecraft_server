@@ -269,10 +269,13 @@ class TestReverseDns(unittest.TestCase):
 class TestClassifyIp(unittest.TestCase):
     def setUp(self):
         app._notified_macs.clear()
+        app._notified_ips.clear()
 
     def test_tailscale_allowed(self):
         with patch.object(app, "resolve_tailscale_identity", return_value={"tailscale_raw": "node"}), \
-             patch.object(app, "_mapping_cache", {}):
+             patch.object(app, "_mapping_cache", {}), \
+             patch.object(app, "_denylist_cache", set()), \
+             patch.object(app, "_allowlist_cache", set()):
             decision = app.classify_ip("100.100.1.1")
         self.assertTrue(decision["allowed"])
         self.assertEqual(decision["reason"], "tailscale")
@@ -280,7 +283,9 @@ class TestClassifyIp(unittest.TestCase):
     def test_tailscale_with_ip_in_mapping_sets_basename(self):
         ts_ip = "100.64.1.2"
         with patch.object(app, "resolve_tailscale_identity", return_value={"tailscale_raw": "node"}), \
-             patch.object(app, "_mapping_cache", {"100.64.1.2": "TsPlayer"}):
+             patch.object(app, "_mapping_cache", {"100.64.1.2": "TsPlayer"}), \
+             patch.object(app, "_denylist_cache", set()), \
+             patch.object(app, "_allowlist_cache", set()):
             decision = app.classify_ip(ts_ip)
         self.assertTrue(decision["allowed"])
         self.assertEqual(decision["identity"].get("basename"), "TsPlayer")
@@ -288,14 +293,18 @@ class TestClassifyIp(unittest.TestCase):
     def test_tailscale_without_mapping_no_basename_no_notification(self):
         with patch.object(app, "resolve_tailscale_identity", return_value={"tailscale_raw": "node"}), \
              patch.object(app, "_mapping_cache", {}), \
-             patch.object(app, "send_telegram") as mock_tg:
+             patch.object(app, "_denylist_cache", set()), \
+             patch.object(app, "_allowlist_cache", set()), \
+             patch.object(app, "send_telegram_with_keyboard") as mock_tg:
             decision = app.classify_ip("100.100.1.1")
         self.assertNotIn("basename", decision["identity"])
         mock_tg.assert_not_called()
 
     def test_local_allowed(self):
         with patch.object(app, "resolve_local_identity", return_value={"reachable": True, "mac": "", "hostname": ""}), \
-             patch.object(app, "_mapping_cache", {}):
+             patch.object(app, "_mapping_cache", {}), \
+             patch.object(app, "_denylist_cache", set()), \
+             patch.object(app, "_allowlist_cache", set()):
             decision = app.classify_ip("192.168.1.50")
         self.assertTrue(decision["allowed"])
         self.assertEqual(decision["reason"], "local-net")
@@ -303,7 +312,9 @@ class TestClassifyIp(unittest.TestCase):
     def test_local_mac_in_mapping_sets_basename(self):
         with patch.object(app, "resolve_local_identity", return_value={"reachable": True, "mac": "aa:bb:cc:dd:ee:ff", "hostname": "host"}), \
              patch.object(app, "_mapping_cache", {"aa:bb:cc:dd:ee:ff": "LocalPlayer"}), \
-             patch.object(app, "send_telegram") as mock_tg:
+             patch.object(app, "_denylist_cache", set()), \
+             patch.object(app, "_allowlist_cache", set()), \
+             patch.object(app, "send_telegram_with_keyboard") as mock_tg:
             decision = app.classify_ip("192.168.1.10")
         self.assertEqual(decision["identity"].get("basename"), "LocalPlayer")
         mock_tg.assert_not_called()
@@ -311,7 +322,9 @@ class TestClassifyIp(unittest.TestCase):
     def test_local_unmapped_mac_sends_telegram_once(self):
         with patch.object(app, "resolve_local_identity", return_value={"reachable": True, "mac": "11:22:33:44:55:66", "hostname": "host"}), \
              patch.object(app, "_mapping_cache", {}), \
-             patch.object(app, "send_telegram") as mock_tg:
+             patch.object(app, "_denylist_cache", set()), \
+             patch.object(app, "_allowlist_cache", set()), \
+             patch.object(app, "send_telegram_with_keyboard") as mock_tg:
             app.classify_ip("192.168.1.20")
             app.classify_ip("192.168.1.20")
         mock_tg.assert_called_once()
@@ -319,7 +332,9 @@ class TestClassifyIp(unittest.TestCase):
     def test_local_unmapped_mac_first_seen_notifies(self):
         with patch.object(app, "resolve_local_identity", return_value={"reachable": True, "mac": "aa:11:22:33:44:55", "hostname": ""}), \
              patch.object(app, "_mapping_cache", {}), \
-             patch.object(app, "send_telegram") as mock_tg:
+             patch.object(app, "_denylist_cache", set()), \
+             patch.object(app, "_allowlist_cache", set()), \
+             patch.object(app, "send_telegram_with_keyboard") as mock_tg:
             decision = app.classify_ip("192.168.1.30")
         self.assertNotIn("basename", decision["identity"])
         mock_tg.assert_called_once()
@@ -327,20 +342,220 @@ class TestClassifyIp(unittest.TestCase):
 
     def test_local_unreachable_denied(self):
         with patch.object(app, "resolve_local_identity", return_value={"reachable": False, "mac": "", "hostname": ""}), \
-             patch.object(app, "_mapping_cache", {}):
+             patch.object(app, "_mapping_cache", {}), \
+             patch.object(app, "_denylist_cache", set()), \
+             patch.object(app, "_allowlist_cache", set()):
             decision = app.classify_ip("192.168.1.50")
         self.assertFalse(decision["allowed"])
         self.assertEqual(decision["reason"], "local-net-unreachable")
 
     def test_external_denied(self):
-        decision = app.classify_ip("8.8.8.8")
+        with patch.object(app, "_denylist_cache", set()), \
+             patch.object(app, "_allowlist_cache", set()):
+            decision = app.classify_ip("8.8.8.8")
         self.assertFalse(decision["allowed"])
         self.assertEqual(decision["reason"], "denied")
+
+    def test_allowlisted_external_ip_returns_allowlisted(self):
+        with patch.object(app, "_denylist_cache", set()), \
+             patch.object(app, "_allowlist_cache", {"8.8.8.8"}), \
+             patch.object(app, "send_telegram_with_keyboard") as mock_tg:
+            decision = app.classify_ip("8.8.8.8")
+        self.assertTrue(decision["allowed"])
+        self.assertEqual(decision["reason"], "allowlisted")
+        mock_tg.assert_not_called()
+
+    def test_denylisted_external_ip_returns_denylisted(self):
+        with patch.object(app, "_denylist_cache", {"8.8.8.8"}), \
+             patch.object(app, "_allowlist_cache", set()), \
+             patch.object(app, "send_telegram_with_keyboard") as mock_tg:
+            decision = app.classify_ip("8.8.8.8")
+        self.assertFalse(decision["allowed"])
+        self.assertEqual(decision["reason"], "denylisted")
+        mock_tg.assert_not_called()
+
+    def test_denylist_takes_priority_over_allowlist(self):
+        with patch.object(app, "_denylist_cache", {"8.8.8.8"}), \
+             patch.object(app, "_allowlist_cache", {"8.8.8.8"}):
+            decision = app.classify_ip("8.8.8.8")
+        self.assertFalse(decision["allowed"])
+        self.assertEqual(decision["reason"], "denylisted")
+
+    def test_denylisted_local_mac_returns_denylisted(self):
+        mac = "aa:bb:cc:dd:ee:ff"
+        with patch.object(app, "resolve_local_identity", return_value={"reachable": True, "mac": mac, "hostname": ""}), \
+             patch.object(app, "_mapping_cache", {}), \
+             patch.object(app, "_denylist_cache", {mac}), \
+             patch.object(app, "_allowlist_cache", set()), \
+             patch.object(app, "send_telegram_with_keyboard") as mock_tg:
+            decision = app.classify_ip("192.168.1.10")
+        self.assertFalse(decision["allowed"])
+        self.assertEqual(decision["reason"], "denylisted")
+        mock_tg.assert_not_called()
+
+    def test_allowlisted_local_mac_no_notification(self):
+        mac = "aa:bb:cc:dd:ee:ff"
+        with patch.object(app, "resolve_local_identity", return_value={"reachable": True, "mac": mac, "hostname": ""}), \
+             patch.object(app, "_mapping_cache", {}), \
+             patch.object(app, "_denylist_cache", set()), \
+             patch.object(app, "_allowlist_cache", {mac}), \
+             patch.object(app, "send_telegram_with_keyboard") as mock_tg:
+            decision = app.classify_ip("192.168.1.10")
+        self.assertTrue(decision["allowed"])
+        self.assertEqual(decision["reason"], "allowlisted")
+        mock_tg.assert_not_called()
+        self.assertNotIn(mac, app._notified_macs)
 
 
 # ---------------------------------------------------------------------------
 # Telegram notification
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# load_list
+# ---------------------------------------------------------------------------
+
+
+class TestLoadList(unittest.TestCase):
+    def test_valid_array_returns_set(self):
+        data = json.dumps(["1.2.3.4", "5.6.7.8"])
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+            f.write(data)
+            path = f.name
+        try:
+            result = app.load_list(path)
+            self.assertIsInstance(result, set)
+            self.assertIn("1.2.3.4", result)
+            self.assertIn("5.6.7.8", result)
+        finally:
+            os.unlink(path)
+
+    def test_missing_file_returns_empty_set(self):
+        result = app.load_list("/nonexistent/allowlist.json")
+        self.assertEqual(result, set())
+
+    def test_malformed_json_returns_empty_set(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+            f.write("not json {{{")
+            path = f.name
+        try:
+            result = app.load_list(path)
+            self.assertEqual(result, set())
+        finally:
+            os.unlink(path)
+
+    def test_non_array_json_returns_empty_set(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+            f.write('{"key": "value"}')
+            path = f.name
+        try:
+            result = app.load_list(path)
+            self.assertEqual(result, set())
+        finally:
+            os.unlink(path)
+
+    def test_mac_entries_normalized(self):
+        data = json.dumps(["AA:BB:CC:DD:EE:FF", "11-22-33-44-55-66"])
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+            f.write(data)
+            path = f.name
+        try:
+            result = app.load_list(path)
+            self.assertIn("aa:bb:cc:dd:ee:ff", result)
+            self.assertIn("11:22:33:44:55:66", result)
+        finally:
+            os.unlink(path)
+
+
+# ---------------------------------------------------------------------------
+# _append_to_denylist
+# ---------------------------------------------------------------------------
+
+
+class TestAppendToDenylist(unittest.TestCase):
+    def test_creates_file_if_missing(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "denylist.json")
+            with patch.object(app, "DENYLIST_FILE", path):
+                app._append_to_denylist("1.2.3.4")
+            with open(path) as f:
+                data = json.load(f)
+            self.assertIn("1.2.3.4", data)
+
+    def test_appends_new_entry(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "denylist.json")
+            with open(path, "w") as f:
+                json.dump(["10.0.0.1"], f)
+            with patch.object(app, "DENYLIST_FILE", path):
+                app._append_to_denylist("1.2.3.4")
+            with open(path) as f:
+                data = json.load(f)
+            self.assertIn("1.2.3.4", data)
+            self.assertIn("10.0.0.1", data)
+
+    def test_skips_duplicate(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "denylist.json")
+            with open(path, "w") as f:
+                json.dump(["1.2.3.4"], f)
+            with patch.object(app, "DENYLIST_FILE", path):
+                app._append_to_denylist("1.2.3.4")
+                app._append_to_denylist("1.2.3.4")
+            with open(path) as f:
+                data = json.load(f)
+            self.assertEqual(data.count("1.2.3.4"), 1)
+
+    def test_normalizes_mac_before_append(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "denylist.json")
+            with patch.object(app, "DENYLIST_FILE", path):
+                app._append_to_denylist("AA:BB:CC:DD:EE:FF")
+            with open(path) as f:
+                data = json.load(f)
+            self.assertIn("aa:bb:cc:dd:ee:ff", data)
+
+
+# ---------------------------------------------------------------------------
+# send_telegram_with_keyboard
+# ---------------------------------------------------------------------------
+
+
+class TestSendTelegramWithKeyboard(unittest.TestCase):
+    def test_sends_reply_markup_when_configured(self):
+        mock_resp = MagicMock()
+        mock_resp.ok = True
+        with patch.object(app, "TELEGRAM_BOT_TOKEN", "tok"), \
+             patch.object(app, "TELEGRAM_CHAT_ID", "cid"), \
+             patch("requests.post", return_value=mock_resp) as mock_post:
+            app.send_telegram_with_keyboard("[auth-sidecar] DENIED: 1.2.3.4", "1.2.3.4")
+        mock_post.assert_called_once()
+        _, kwargs = mock_post.call_args
+        payload = kwargs["json"]
+        self.assertIn("reply_markup", payload)
+        self.assertIn("1.2.3.4", payload["text"])
+
+    def test_callback_data_uses_pipe_separator(self):
+        mock_resp = MagicMock()
+        mock_resp.ok = True
+        with patch.object(app, "TELEGRAM_BOT_TOKEN", "tok"), \
+             patch.object(app, "TELEGRAM_CHAT_ID", "cid"), \
+             patch("requests.post", return_value=mock_resp) as mock_post:
+            app.send_telegram_with_keyboard("msg", "aa:bb:cc:dd:ee:ff")
+        _, kwargs = mock_post.call_args
+        markup = json.loads(kwargs["json"]["reply_markup"])
+        buttons = markup["inline_keyboard"][0]
+        for btn in buttons:
+            self.assertIn("|", btn["callback_data"])
+            self.assertNotIn("aa:bb:cc:dd:ee:ff".replace(":", "|"), btn["callback_data"])
+
+    def test_skips_when_not_configured(self):
+        with patch.object(app, "TELEGRAM_BOT_TOKEN", ""), \
+             patch.object(app, "TELEGRAM_CHAT_ID", ""), \
+             patch("requests.post") as mock_post:
+            app.send_telegram_with_keyboard("msg", "1.2.3.4")
+        mock_post.assert_not_called()
 
 
 class TestSendTelegram(unittest.TestCase):
@@ -385,6 +600,9 @@ class FakeSocket:
 
 
 class TestAuthHandler(unittest.TestCase):
+    def setUp(self):
+        app._notified_ips.clear()
+
     def _make_handler(self, path: str) -> tuple:
         request_line = f"GET {path} HTTP/1.0\r\n\r\n".encode()
         sock = FakeSocket(request_line)
@@ -418,19 +636,66 @@ class TestAuthHandler(unittest.TestCase):
         status, body = self._call_do_get("/other")
         self.assertEqual(status, 404)
 
-    def test_denied_sends_telegram(self):
+    def test_denied_sends_keyboard_notification_and_auto_denylists(self):
         with patch.object(app, "classify_ip", return_value={"allowed": False, "reason": "denied", "identity": {}}), \
-             patch.object(app, "send_telegram") as mock_tg:
+             patch.object(app, "send_telegram_with_keyboard") as mock_tg, \
+             patch.object(app, "_append_to_denylist") as mock_denylist:
             status, body = self._call_do_get("/auth?ip=8.8.8.8")
         self.assertEqual(status, 403)
         mock_tg.assert_called_once()
+        mock_denylist.assert_called_once_with("8.8.8.8")
+
+    def test_denied_second_request_no_duplicate_notification(self):
+        with patch.object(app, "classify_ip", return_value={"allowed": False, "reason": "denied", "identity": {}}), \
+             patch.object(app, "send_telegram_with_keyboard") as mock_tg, \
+             patch.object(app, "_append_to_denylist"):
+            self._call_do_get("/auth?ip=8.8.8.8")
+            self._call_do_get("/auth?ip=8.8.8.8")
+        mock_tg.assert_called_once()
+
+    def test_denylisted_silent_403(self):
+        with patch.object(app, "classify_ip", return_value={"allowed": False, "reason": "denylisted", "identity": {}}), \
+             patch.object(app, "send_telegram_with_keyboard") as mock_tg, \
+             patch.object(app, "_append_to_denylist") as mock_denylist:
+            status, body = self._call_do_get("/auth?ip=8.8.8.8")
+        self.assertEqual(status, 403)
+        mock_tg.assert_not_called()
+        mock_denylist.assert_not_called()
 
     def test_allowed_no_telegram(self):
         with patch.object(app, "classify_ip", return_value={"allowed": True, "reason": "tailscale", "identity": {}}), \
-             patch.object(app, "send_telegram") as mock_tg:
+             patch.object(app, "send_telegram_with_keyboard") as mock_tg:
             status, body = self._call_do_get("/auth?ip=100.100.1.1")
         self.assertEqual(status, 200)
         mock_tg.assert_not_called()
+
+    def test_local_net_unreachable_sends_plain_telegram(self):
+        with patch.object(app, "classify_ip", return_value={"allowed": False, "reason": "local-net-unreachable", "identity": {}}), \
+             patch.object(app, "send_telegram") as mock_tg, \
+             patch.object(app, "send_telegram_with_keyboard") as mock_kbd:
+            status, body = self._call_do_get("/auth?ip=192.168.1.99")
+        self.assertEqual(status, 403)
+        mock_tg.assert_called_once()
+        mock_kbd.assert_not_called()
+        self.assertIn("192.168.1.99", mock_tg.call_args[0][0])
+
+    def test_unhandled_denied_reason_logs_warning(self):
+        with patch.object(app, "classify_ip", return_value={"allowed": False, "reason": "unknown-reason", "identity": {}}), \
+             patch.object(app, "send_telegram") as mock_tg, \
+             patch.object(app, "send_telegram_with_keyboard") as mock_kbd:
+            status, body = self._call_do_get("/auth?ip=192.168.1.99")
+        self.assertEqual(status, 403)
+        mock_tg.assert_not_called()
+        mock_kbd.assert_not_called()
+
+    def test_denied_updates_denylist_cache_immediately(self):
+        app._denylist_cache.discard("9.9.9.9")
+        with patch.object(app, "classify_ip", return_value={"allowed": False, "reason": "denied", "identity": {}}), \
+             patch.object(app, "send_telegram_with_keyboard"), \
+             patch.object(app, "_append_to_denylist"):
+            self._call_do_get("/auth?ip=9.9.9.9")
+        self.assertIn("9.9.9.9", app._denylist_cache)
+        app._denylist_cache.discard("9.9.9.9")
 
 
 if __name__ == "__main__":
