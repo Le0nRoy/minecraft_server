@@ -172,7 +172,7 @@ clean-backups:
 
 ## test       Run the Python test suite (telegram-bot + healthcheck)
 test:
-	@python -m pytest telegram-bot/ healthcheck/ -v
+	@python3 -m pytest telegram-bot/ healthcheck/ -v
 
 # ---------------------------------------------------------------------------
 # Help

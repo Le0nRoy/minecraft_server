@@ -7,12 +7,14 @@ on:
       - 'healthcheck/**'
       - 'requirements-dev.txt'
       - 'pytest.ini'
+      - '.github/workflows/test.yml'
   pull_request:
     paths:
       - 'telegram-bot/**'
       - 'healthcheck/**'
       - 'requirements-dev.txt'
       - 'pytest.ini'
+      - '.github/workflows/test.yml'
 
 jobs:
   test:
