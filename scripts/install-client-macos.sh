@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# install-client-macos.sh - Install the Minecraft Infra Pack modpack on macOS via Prism Launcher.
+# install-client-macos.sh - Install the Minecraft Infra Pack modpack on macOS via PolyMC.
 #
 # Usage: bash install-client-macos.sh
 #
 # The script will:
-#   1. Locate (or offer to install) Prism Launcher in ~/Applications or /Applications
+#   1. Locate (or offer to install) PolyMC in ~/Applications or /Applications
 #   2. Verify (or offer to install) Java 21+
 #   3. Download packwiz-installer-bootstrap.jar
-#   4. Create a fully configured Prism Launcher instance for NeoForge 1.21.1,
-#      directly inside Prism's real "instances" directory
+#   4. Create a fully configured PolyMC instance for NeoForge 1.21.1,
+#      directly inside PolyMC's real "instances" directory
 #   5. Configure packwiz bootstrap so mods sync automatically on launch
 
 set -euo pipefail
@@ -24,7 +24,7 @@ PACKWIZ_PACK_URL="https://raw.githubusercontent.com/Le0nRoy/minecraft_server/mai
 MC_VERSION="1.21.1"
 NEOFORGE_VERSION="21.1.244"
 LWJGL_VERSION="3.3.3"
-PRISM_DOWNLOAD_URL="https://prismlauncher.org/download/mac"
+POLYMC_RELEASES_API_URL="https://api.github.com/repos/PolyMC/PolyMC/releases/latest"
 ADOPTIUM_API_URL="https://api.adoptium.net/v3/assets/feature_releases/21/ga?image_type=jdk&architecture=x64&vendor=eclipse&page_size=1"
 
 # ---------------------------------------------------------------------------
@@ -44,13 +44,13 @@ error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 die()     { error "$*"; exit 1; }
 
 # ---------------------------------------------------------------------------
-# Step 1 - Locate (or offer to install) Prism Launcher
+# Step 1 - Locate (or offer to install) PolyMC
 # ---------------------------------------------------------------------------
 
-find_prism_app() {
+find_polymc_app() {
     local candidates=(
-        "${HOME}/Applications/Prism Launcher.app"
-        "/Applications/Prism Launcher.app"
+        "${HOME}/Applications/PolyMC.app"
+        "/Applications/PolyMC.app"
     )
 
     for app in "${candidates[@]}"; do
@@ -63,48 +63,89 @@ find_prism_app() {
     return 1
 }
 
-offer_install_prism() {
+get_polymc_dmg_url() {
+    local api_response asset_url
+    api_response="$(curl -fsSL "${POLYMC_RELEASES_API_URL}")"
+    asset_url="$(echo "${api_response}" | grep -o '"browser_download_url": *"[^"]*\.dmg"' | head -1 | grep -o 'https://[^"]*')"
+    echo "${asset_url}"
+}
+
+offer_install_polymc() {
+    local tmp_dir="$1"
+
     echo ""
-    warn "Prism Launcher is not installed in ~/Applications or /Applications."
+    warn "PolyMC is not installed in ~/Applications or /Applications."
+    echo "  PolyMC supports offline (no Microsoft account) play out of the box."
     echo ""
 
+    # Try Homebrew first if available
     if command -v brew &>/dev/null; then
-        read -r -p "  Install Prism Launcher now via Homebrew? [Y/n] " answer
-        if [[ "${answer,,}" != "n" ]]; then
-            info "Installing Prism Launcher via Homebrew..."
-            brew install --cask prismlauncher
+        info "Homebrew detected — trying 'brew install --cask polymc'..."
+        if brew install --cask polymc; then
+            success "PolyMC installed via Homebrew."
             return 0
         fi
+        warn "Homebrew cask install failed — falling back to direct DMG download."
+        echo ""
     fi
 
-    read -r -p "  Open the Prism Launcher download page in your browser instead? [Y/n] " answer
-    if [[ "${answer,,}" != "n" ]]; then
-        open "${PRISM_DOWNLOAD_URL}"
+    read -r -p "  Download and install PolyMC from the release binary now? [Y/n] " answer
+    if [[ "${answer,,}" == "n" ]]; then
+        echo ""
+        echo "  Download manually from: https://github.com/PolyMC/PolyMC/releases/latest"
+        echo "  Copy PolyMC.app to ~/Applications, then re-run this script."
+        exit 1
     fi
-    echo ""
-    echo "  Please install Prism Launcher, run it once, and then re-run this script."
-    exit 1
+
+    info "Fetching latest PolyMC release info..."
+    local dmg_url
+    dmg_url="$(get_polymc_dmg_url)" || true
+
+    if [[ -z "${dmg_url}" ]]; then
+        warn "Could not resolve latest PolyMC DMG URL automatically."
+        echo "  Download manually from: https://github.com/PolyMC/PolyMC/releases/latest"
+        echo "  Copy PolyMC.app to ~/Applications, then re-run this script."
+        exit 1
+    fi
+
+    # Use the caller's tmp_dir so the existing EXIT trap handles cleanup on error
+    local tmp_dmg="${tmp_dir}/PolyMC.dmg"
+    info "Downloading PolyMC DMG..."
+    curl -fsSL --progress-bar -o "${tmp_dmg}" "${dmg_url}"
+
+    info "Mounting DMG..."
+    local mount_point
+    mount_point="$(hdiutil attach "${tmp_dmg}" -nobrowse -readonly | awk 'END{print $NF}')"
+
+    info "Copying PolyMC.app to ~/Applications..."
+    mkdir -p "${HOME}/Applications"
+    cp -R "${mount_point}/PolyMC.app" "${HOME}/Applications/"
+
+    info "Unmounting DMG..."
+    hdiutil detach "${mount_point}" -quiet
+
+    success "PolyMC installed to ~/Applications/PolyMC.app"
 }
 
 # ---------------------------------------------------------------------------
-# Step 2 - Locate Prism Launcher's real "instances" directory
+# Step 2 - Locate PolyMC's real "instances" directory
 # ---------------------------------------------------------------------------
 
-find_prism_data_dir() {
+find_polymc_data_dir() {
     local app_path="$1"
 
     # Portable installs keep their data (including instances/) right next to
-    # the .app bundle, marked by a prismlauncher.cfg file there.
+    # the .app bundle, marked by a polymc.cfg file there.
     local app_parent
     app_parent="$(dirname "${app_path}")"
-    if [[ -f "${app_parent}/prismlauncher.cfg" ]]; then
+    if [[ -f "${app_parent}/polymc.cfg" ]]; then
         echo "${app_parent}"
         return 0
     fi
 
-    # Installed (non-portable) Prism keeps user data under
+    # Installed (non-portable) PolyMC keeps user data under
     # ~/Library/Application Support, standard for macOS apps.
-    local standard="${HOME}/Library/Application Support/PrismLauncher"
+    local standard="${HOME}/Library/Application Support/PolyMC"
     echo "${standard}"
     return 0
 }
@@ -128,15 +169,6 @@ install_java() {
     echo ""
     warn "Java 21+ is required but was not found (or is too old)."
     echo ""
-
-    if command -v brew &>/dev/null; then
-        read -r -p "  Install Java 21 (Temurin) now via Homebrew? [Y/n] " answer
-        if [[ "${answer,,}" != "n" ]]; then
-            info "Installing Java 21 via Homebrew..."
-            brew install --cask temurin@21
-            return $?
-        fi
-    fi
 
     info "Looking up the latest Java 21 (Temurin) installer..."
     local pkg_url
@@ -209,7 +241,7 @@ download_bootstrap() {
 }
 
 # ---------------------------------------------------------------------------
-# Step 5 - Create Prism Launcher instance
+# Step 5 - Create PolyMC instance
 # ---------------------------------------------------------------------------
 
 create_instance() {
@@ -261,7 +293,7 @@ EOF
 EOF
 
     # --- Copy bootstrap jar into .minecraft ---
-    # Must live here: Prism runs PreLaunchCommand with the instance's
+    # Must live here: PolyMC runs PreLaunchCommand with the instance's
     # .minecraft directory as its working directory, and the command
     # above references the jar by relative path.
     info "Copying packwiz-installer-bootstrap.jar into instance..."
@@ -289,22 +321,22 @@ main() {
 
     local bootstrap_jar="${tmp_dir}/packwiz-installer-bootstrap.jar"
 
-    # 1. Locate (or install) Prism Launcher
-    info "Locating Prism Launcher..."
-    local prism_app
-    if ! prism_app="$(find_prism_app)"; then
-        offer_install_prism
-        if ! prism_app="$(find_prism_app)"; then
-            die "Could not locate Prism Launcher after installation. Run it once manually, then re-run this script."
+    # 1. Locate (or install) PolyMC
+    info "Locating PolyMC..."
+    local polymc_app
+    if ! polymc_app="$(find_polymc_app)"; then
+        offer_install_polymc "${tmp_dir}"
+        if ! polymc_app="$(find_polymc_app)"; then
+            die "Could not locate PolyMC after installation. Run it once manually, then re-run this script."
         fi
     fi
-    success "Found Prism Launcher: ${prism_app}"
+    success "Found PolyMC: ${polymc_app}"
 
     # 2. Locate its real instances directory
-    info "Locating Prism Launcher's instances directory..."
-    local prism_data_dir instances_dir
-    prism_data_dir="$(find_prism_data_dir "${prism_app}")"
-    instances_dir="${prism_data_dir}/instances"
+    info "Locating PolyMC's instances directory..."
+    local polymc_data_dir instances_dir
+    polymc_data_dir="$(find_polymc_data_dir "${polymc_app}")"
+    instances_dir="${polymc_data_dir}/instances"
     mkdir -p "${instances_dir}"
     success "Instances directory: ${instances_dir}"
 
@@ -314,7 +346,7 @@ main() {
     # 4. Download bootstrap
     download_bootstrap "${bootstrap_jar}"
 
-    # 5. Create instance directly inside Prism's instances directory
+    # 5. Create instance directly inside PolyMC's instances directory
     create_instance "${instances_dir}" "${bootstrap_jar}"
 
     # ---------------------------------------------------------------------------
@@ -326,20 +358,21 @@ main() {
     echo -e "  ${GREEN}Installation complete!${NC}                 "
     echo "==========================================="
     echo ""
-    echo "  The instance was created directly inside Prism Launcher's instances"
+    echo "  The instance was created directly inside PolyMC's instances"
     echo "  folder - no manual copying needed."
     echo ""
     echo "  Next steps:"
-    echo "  1. Open (or restart) Prism Launcher."
-    echo "  2. Find and select '${PACK_NAME}'."
-    echo "  3. Click Launch - packwiz will download all mods on first run."
-    echo "  4. Enjoy the server!"
+    echo "  1. Open (or restart) PolyMC."
+    echo "  2. Add an offline account: Accounts (top-right) → Add Offline → enter any username."
+    echo "  3. Find and select '${PACK_NAME}'."
+    echo "  4. Click Launch - packwiz will download all mods on first run."
+    echo "  5. Connect to the server — no Microsoft account required."
     echo ""
     echo "  Tip: An internet connection is required on first launch."
     echo ""
 
     # Show a native macOS notification
-    osascript -e "display notification \"Instance ready - launch Prism Launcher to play!\" with title \"Minecraft Infra Pack\" subtitle \"Installation complete\"" 2>/dev/null || true
+    osascript -e "display notification \"Instance ready - launch PolyMC to play!\" with title \"Minecraft Infra Pack\" subtitle \"Installation complete\"" 2>/dev/null || true
 }
 
 main "$@"
