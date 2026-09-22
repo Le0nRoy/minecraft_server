@@ -564,12 +564,9 @@ async def cmd_wipe(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await _notify(context.bot, success_msg)
 
 
+@require_admin
 async def cmd_macmap(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Manage MAC/Tailscale-IP → basename mappings. Admin-only."""
-    if str(update.effective_chat.id) != CHAT_ID:
-        await update.message.reply_text("Not authorised.")
-        return
-
     args = context.args or []
     if not args:
         await update.message.reply_text(
@@ -648,6 +645,10 @@ async def cmd_macmap(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 async def handle_list_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle allow|key and deny|key inline button callbacks."""
     query = update.callback_query
+    if update.effective_user.id not in ADMIN_USER_IDS:
+        logger.warning("Callback from unauthorized user %s — ignored", update.effective_user.id)
+        await query.answer("Not authorised.")
+        return
     if str(update.effective_chat.id) != CHAT_ID:
         logger.warning("Callback from unauthorized chat %s — ignored", update.effective_chat.id)
         await query.answer()

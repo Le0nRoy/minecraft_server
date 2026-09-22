@@ -40,6 +40,7 @@ if "telegram" not in sys.modules:
 
 os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test-token")
 os.environ.setdefault("TELEGRAM_CHAT_ID", "12345")
+os.environ.setdefault("ADMIN_USER_IDS", "100")
 
 sys.path.insert(0, os.path.dirname(__file__))
 import bot  # noqa: E402
@@ -49,12 +50,14 @@ import bot  # noqa: E402
 # Helpers
 # ---------------------------------------------------------------------------
 
-ADMIN_CHAT_ID = bot.CHAT_ID
+ADMIN_USER_ID = 100
+NON_ADMIN_USER_ID = 99999
 
 
-def _make_update(chat_id: str = ADMIN_CHAT_ID) -> MagicMock:
+def _make_update(user_id: int = ADMIN_USER_ID) -> MagicMock:
     update = MagicMock()
-    update.effective_chat.id = int(chat_id) if chat_id.lstrip("-").isdigit() else chat_id
+    update.effective_chat.id = int(bot.CHAT_ID)
+    update.effective_user.id = user_id
     update.message.reply_text = AsyncMock()
     return update
 
@@ -120,11 +123,18 @@ class TestMappingFileIO(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class TestCmdMacmapAuth(unittest.TestCase):
+    def setUp(self):
+        self._orig = bot.ADMIN_USER_IDS
+        bot.ADMIN_USER_IDS = [ADMIN_USER_ID]
+
+    def tearDown(self):
+        bot.ADMIN_USER_IDS = self._orig
+
     def test_non_admin_rejected(self):
-        update = _make_update(chat_id="99999")
+        update = _make_update(user_id=NON_ADMIN_USER_ID)
         ctx = _make_context()
         run(bot.cmd_macmap(update, ctx))
-        update.message.reply_text.assert_called_once_with("Not authorised.")
+        update.message.reply_text.assert_called_once_with("⛔ Not authorised.")
 
     def test_no_args_shows_usage(self):
         update = _make_update()
@@ -147,6 +157,13 @@ class TestCmdMacmapAuth(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class TestCmdMacmapList(unittest.TestCase):
+    def setUp(self):
+        self._orig = bot.ADMIN_USER_IDS
+        bot.ADMIN_USER_IDS = [ADMIN_USER_ID]
+
+    def tearDown(self):
+        bot.ADMIN_USER_IDS = self._orig
+
     def test_empty_mapping(self):
         update = _make_update()
         ctx = _make_context("list")
@@ -171,6 +188,13 @@ class TestCmdMacmapList(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class TestCmdMacmapSet(unittest.TestCase):
+    def setUp(self):
+        self._orig = bot.ADMIN_USER_IDS
+        bot.ADMIN_USER_IDS = [ADMIN_USER_ID]
+
+    def tearDown(self):
+        bot.ADMIN_USER_IDS = self._orig
+
     def test_set_colon_mac(self):
         update = _make_update()
         ctx = _make_context("set", "aa:bb:cc:dd:ee:ff", "Player1")
@@ -238,6 +262,13 @@ class TestCmdMacmapSet(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class TestCmdMacmapDel(unittest.TestCase):
+    def setUp(self):
+        self._orig = bot.ADMIN_USER_IDS
+        bot.ADMIN_USER_IDS = [ADMIN_USER_ID]
+
+    def tearDown(self):
+        bot.ADMIN_USER_IDS = self._orig
+
     def test_del_existing(self):
         existing = {"aa:bb:cc:dd:ee:ff": "Player1"}
         written = {}
@@ -341,7 +372,7 @@ class TestAppendToList(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-def _make_callback_query(chat_id: str = ADMIN_CHAT_ID, data: str = "allow|1.2.3.4") -> MagicMock:
+def _make_callback_query(user_id: int = ADMIN_USER_ID, data: str = "allow|1.2.3.4") -> MagicMock:
     query = MagicMock()
     query.data = data
     query.answer = AsyncMock()
@@ -349,15 +380,23 @@ def _make_callback_query(chat_id: str = ADMIN_CHAT_ID, data: str = "allow|1.2.3.
     query.message = MagicMock()
     query.message.reply_text = AsyncMock()
     update = MagicMock()
-    update.effective_chat.id = int(chat_id) if chat_id.lstrip("-").isdigit() else chat_id
+    update.effective_chat.id = int(bot.CHAT_ID)
+    update.effective_user.id = user_id
     update.callback_query = query
     ctx = MagicMock()
     return update, ctx
 
 
 class TestHandleListAction(unittest.TestCase):
+    def setUp(self):
+        self._orig = bot.ADMIN_USER_IDS
+        bot.ADMIN_USER_IDS = [ADMIN_USER_ID]
+
+    def tearDown(self):
+        bot.ADMIN_USER_IDS = self._orig
+
     def test_unauthorized_chat_ignored(self):
-        update, ctx = _make_callback_query(chat_id="99999", data="allow|1.2.3.4")
+        update, ctx = _make_callback_query(user_id=NON_ADMIN_USER_ID, data="allow|1.2.3.4")
         with patch.object(bot, "_append_to_list") as mock_append:
             run(bot.handle_list_action(update, ctx))
         mock_append.assert_not_called()
