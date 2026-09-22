@@ -395,8 +395,15 @@ class TestHandleListAction(unittest.TestCase):
     def tearDown(self):
         bot.ADMIN_USER_IDS = self._orig
 
-    def test_unauthorized_chat_ignored(self):
+    def test_unauthorized_user_ignored(self):
         update, ctx = _make_callback_query(user_id=NON_ADMIN_USER_ID, data="allow|1.2.3.4")
+        with patch.object(bot, "_append_to_list") as mock_append:
+            run(bot.handle_list_action(update, ctx))
+        mock_append.assert_not_called()
+
+    def test_unauthorized_chat_callback_ignored(self):
+        update, ctx = _make_callback_query(user_id=ADMIN_USER_ID, data="allow|1.2.3.4")
+        update.effective_chat.id = int(bot.CHAT_ID) + 1  # valid user, wrong chat
         with patch.object(bot, "_append_to_list") as mock_append:
             run(bot.handle_list_action(update, ctx))
         mock_append.assert_not_called()
